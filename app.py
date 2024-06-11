@@ -23,14 +23,9 @@ class App(ctk.CTk):
 #        print(root)
         ctk.set_default_color_theme('dark-blue')  # Themes: blue (default), dark-blue, green
         ctk.set_appearance_mode('dark')  # Modes: system (default), light, dark
-        self.borderColor = '#808080'
-        self.userButtons = {}
-        self.userButtonCodes = {}
-
         self.title('Phill\'s UI Test')
         self.geometry(f'{800}x{600}+{200}+{200}')
         self.after(100, self.periodic)
-
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -46,32 +41,18 @@ class App(ctk.CTk):
         except:
             pass
 
-        self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
+        # self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
+        self.initialDir = os.path.join(os.path.expanduser('~'), 'Downloads/gcode_plot')
+        self.borderColor = '#808080'
+        self.userButtons = {}
+        self.userButtonCodes = {}
+        self.showRapids = False
+        self.rapidArrowLen = 5
 
+        # create the gui
         self.create_gui()
-        self.create_tabs()# = Tabs(self)
-        self.create_main_button_frame()
-        self.create_main_control_frame()
-        self.create_main_1_frame()
-        self.create_main_2_frame()
-        self.create_main_3_frame()
-        self.create_main_4_frame()
-        self.create_main_5_frame()
-        self.create_conversational_buttons_frame()
-        self.create_conversational_preview_frame()
-        self.create_conversational_input_frame()
-        self.create_parameters_1_frame()
-        self.create_parameters_2_frame()
-        self.create_parameters_3_frame()
-        self.create_settings_1_frame()
-        self.create_settings_2_frame()
-        self.create_settings_3_frame()
-        self.create_status_1_frame()
-        self.create_status_2_frame()
-        self.create_status_3_frame()
 
-        filename = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files/plasmac/metric_wrench.ngc')
-#        self.convPreview.plot(filename, self)
+
 
         self.mainloop()
 
@@ -194,18 +175,33 @@ class App(ctk.CTk):
         filename = askopenfilename(title = 'File To Plot',
                                    initialdir = self.initialDir,
                                    filetypes = (('gcode file', '.ngc .tap .nc'), ('all files', '.*')))
+        if not filename:
+            return
+        self.initialDir = os.path.dirname(filename)
         self.plot(filename)
 
     def plot(self, filename):
+        #clear existing plot
         self.ax.clear()
-        self.initialDir = os.path.dirname(filename)
-        print(f'filename:{filename}   self.initialDir:{self.initialDir}')
-        self.pg.load(filename)
-        for point in self.pg.canon.points:
-            if point['shape'] == 'arc':
-                color = '#00008f'
-                linestyle = '-'
-                patch = patches.Arc((point['centerX'],
+        # parse the gcode file
+        unitcode = 'G21'
+        initcode = 'G21 G40 G49 G80 G90 G92.1 G94 G97 M52P1'
+        self.canon = Canon()
+        parameter = tempfile.NamedTemporaryFile()
+        self.canon.parameter_file = parameter.name
+        result, seq = gcode.parse(filename, self.canon, unitcode, initcode)
+        if result > gcode.MIN_ERROR:
+            self.ax.set_title(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
+            plt.show()
+            self.canvas.draw()
+            return
+        # iterate through the points
+        for point in self.canon.points:
+            shape = None
+            linestyle = ':' if point['shape'] == 'rapid' else '-'
+            color = '#c0c0c0'
+            if point['shape'] == 'arc': # arcs
+                shape = patches.Arc((point['centerX'],
                                      point['centerY']),
                                      width=point['radius'] * 2,
                                      height=point['radius'] * 2,
@@ -215,19 +211,47 @@ class App(ctk.CTk):
                                      facecolor='none',
                                      lw=1,
                                      linestyle=linestyle)
-            else:
-                linestyle = '-' if point['shape'] == 'line' else ':'
-                color = '#0000ff' if point['shape'] == 'line' else '#00001f'
+            elif point['shape'] == 'line': # lines
                 closed = True if point['points'][0] == point['points'][-1] else False
-                patch = patches.Polygon(point['points'],
+                shape = patches.Polygon(point['points'],
                                         closed=closed,
                                         edgecolor=color,
                                         facecolor='none',
                                         lw=1,
                                         linestyle=linestyle)
-            self.ax.add_patch(patch)
+            elif point['shape'] == 'rapid' and self.showRapids: # rapids
+                if math.sqrt((point['points'][1][0] - point['points'][0][0]) ** 2 + (point['points'][1][1] - point['points'][0][1]) ** 2) > self.rapidArrowLen * 2:
+                    closed = True if point['points'][0] == point['points'][-1] else False
+                    centerX = (point['points'][0][0] + point['points'][1][0]) / 2
+                    centerY = (point['points'][0][1] + point['points'][1][1]) / 2
+                    angle = math.atan2(point['points'][1][1] - centerY, point['points'][1][0] - centerX)
+                    startX = centerX - self.rapidArrowLen / 2 * math.cos(angle)
+                    startY = centerY - self.rapidArrowLen / 2 * math.sin(angle)
+                    endX = self.rapidArrowLen * math.cos(angle)
+                    endY = self.rapidArrowLen * math.sin(angle)
+                    arrow = patches.FancyArrow(startX, startY,
+                                            endX, endY,
+                                            head_width=3,
+                                            head_length=5,
+                                            edgecolor=color,
+                                            facecolor=color,
+                                            linestyle='-',
+                                            length_includes_head=True,
+                                            overhang=1)
+                    self.ax.add_patch(arrow)
+                closed = True if point['points'][0] == point['points'][-1] else False
+                shape = patches.Polygon(point['points'],
+                                        closed=closed,
+                                        edgecolor=color,
+                                        facecolor='none',
+                                        lw=1,
+                                        linestyle=linestyle)
+            # add the new shape
+            if shape:
+                self.ax.add_patch(shape)
+        # plot the shapes
         self.ax.plot()
-        self.ax.set_title(os.path.basename(filename), color='orange')
+        self.ax.set_title(os.path.basename(filename), color='#c0c0c0')
         plt.show()
         self.canvas.draw()
 
@@ -399,9 +423,7 @@ class App(ctk.CTk):
         toolbar.update()
 
         self.canvas.draw()
-        self.plotted = False
-        self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
-        self.pg = PlotGenerator(INI)
+#        self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
 
     def create_parameters_1_frame(self):
         ''' parameters ??? frame '''
@@ -466,18 +488,19 @@ class vSeparator(ctk.CTkFrame):
                  **kwargs):
         super().__init__(*args, width=width, height=height, fg_color=fg_color, **kwargs)
 
-
 class Canon:
-    ''' use this class instead of glcanon as we are only interested in points from:
-        arc_feed
-        straight_feed
-        straight_traverse '''
+    ''' use this class instead of glcanon as we are only interested in:
+          points:  from arc_feed, straight_feed, and straight_traverse
+          offsets: from set_g5x_offset and set_xy_rotation '''
 
     def __init__(self):
         self.points = []
+        self.offsetX = 0.0
+        self.offsetY = 0.0
+        self.angle = 0.0
+        self.g5x_offset = ()
 
     def __getattr__(self, attr):
-#        print(f'attr: {attr}')
 
         def set_units(f):
             #FIXME we need to set units properly here
@@ -486,74 +509,106 @@ class Canon:
             return f
 
         def inner(*args):
-#            print(f'attr: {attr}   args: {args}')
-            if attr not in ['arc_feed', 'straight_feed', 'straight_traverse']:
+            ''' adds shapes to the points list '''
+            if attr not in ['arc_feed', 'straight_feed', 'straight_traverse', 'set_g5x_offset', 'set_xy_rotation']:
                 return
+            # no need to scale angles
+            if attr == 'set_xy_rotation':
+                self.angle = math.radians(args[0])
+                return
+            # scale all coordinates
             args = list(map(set_units, args))
-            if len(self.points):
+            if attr == 'set_g5x_offset':
+                self.offsetX = args[1]
+                self.offsetY = args[2]
+                self.g5x_offset = (self.offsetX, self.offsetY)
+                return
+            # get origin coordinates
+            if len(self.points): # if shape has begun
                 if self.points[-1]['shape'] == 'rapid' or self.points[-1]['shape'] == 'line':
-                    startX = self.points[-1]['points'][-1][0]
-                    startY = self.points[-1]['points'][-1][1]
+                    originX = self.points[-1]['lastX'] + self.offsetX
+                    originY = self.points[-1]['lastY'] + self.offsetY
                 else:
-                    startX = self.points[-1]['endX']
-                    startY = self.points[-1]['endY']
-            else:
-                startX = 0.0
-                startY = 0.0
-            endX = args[0]
-            endY = args[1]
-            if attr == 'arc_feed':
-                if len(self.points):
-                    centerX = args[2]
-                    centerY = args[3]
+                    originX = self.points[-1]['lastX'] + self.offsetX
+                    originY = self.points[-1]['lastY'] + self.offsetY
+            else: # start a new shape
+                originX = self.offsetX
+                originY = self.offsetY
+            # set start coordinates
+            startX = self.offsetX + ((originX - self.offsetX) * math.cos(self.angle) - (originY - self.offsetY) * math.sin(self.angle))
+            startY = self.offsetY + ((originX - self.offsetX) * math.sin(self.angle) + (originY - self.offsetY) * math.cos(self.angle))
+            # set end coordinates
+            endX = self.offsetX + (args[0] * math.cos(self.angle) - args[1] * math.sin(self.angle))
+            endY = self.offsetY + (args[0] * math.sin(self.angle) + args[1] * math.cos(self.angle))
+            if attr == 'arc_feed': # arcs
+                # set arc parameters
+                if len(self.points): # if start point exists
+                    # set arc center coordinates
+                    centerX = self.offsetX + (args[2] * math.cos(self.angle) - args[3] * math.sin(self.angle))
+                    centerY = self.offsetY + (args[2] * math.sin(self.angle) + args[3] * math.cos(self.angle))
+                    # set arc radius
                     radius = round(math.sqrt((centerX - endX)**2 + (centerY - endY)**2), 4)
-                    if args[4] > 0:
-                        dir = args[4]
+                    if args[4] > 0: # cw arc 
+                        dir = args[4] * 1
                         startAngle = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
                         endAngle = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
-                    else:
+                    else:  # ccw arc
                         dir = args[4] * -1
                         startAngle = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
                         endAngle = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
-#                    shape = 'circle' if args[0] == startX and args[1] == startY else 'arc'
-                    if args[0] == startX and args[1] == startY:
-#                    if shape == 'circle':
+                    # circles need to be 360 deg, not 0 deg
+                    if endX == startX and endY == startY:
                         endAngle += 360
-                    self.points.append({#'shape': shape,
-                                        'shape': 'arc',
+                    # add new arc to points list
+                    self.points.append({'shape': 'arc',
                                         'endX': endX,
                                         'endY': endY,
                                         'centerX': centerX,
                                         'centerY': centerY,
                                         'radius': radius,
                                         'startAngle': startAngle,
-                                        'endAngle': endAngle})
+                                        'endAngle': endAngle,
+                                        'lastX': args[0],
+                                        'lastY': args[1]})
+                # arcs cannot start from nowhere
                 else:
                     print(f'arc without a previous move: {args}')
-            else:
+            else: # lines and rapids
                 shape = 'line' if attr == 'straight_feed' else 'rapid'
+                # add point to last line/rapid in  points list
                 if len(self.points) and self.points[-1]['shape'] == shape:
-                        self.points[-1]['points'].append((args[0], args[1]))
-                else:
-                    self.points.append({'shape': shape,
-                                        'points': [(startX, startY), (args[0], args[1])]})
+                    self.points[-1]['points'].append((endX, endY))
+                    self.points[-1]['lastX'] = args[0]
+                    self.points[-1]['lastY'] = args[1]
+                    # delete extra rapid points if required
+                    if self.points[-1]['shape'] == 'rapid' and len(self.points[-1]['points']) > 2:
+                        if self.points[-1]['points'][1] == self.points[-1]['points'][2]:
+                            del self.points[-1]['points'][2]
+                        elif self.points[-1]['shape'] == 'rapid' and len(self.points[-1]['points']) > 2:
+                                if (self.points[-1]['points'][0][0], self.points[-1]['points'][0][1]) == self.g5x_offset:
+                                    del self.points[-1]['points'][1]
+                                else:
+                                    del self.points[-1]['points'][0]
+                # create new line/rapid in points list
+                self.points.append({'shape': shape,
+                                        'points': [(startX, startY), (endX, endY)],
+                                        'lastX': args[0],
+                                        'lastY': args[1]})
 
         return inner
 
     def next_line(self, linecode):
         pass
 
-    # These can't return None...
+    ''' these cannot return None '''
     def get_external_length_units(self):
-        return 1.0
+        return 1.0 # dinosaur
 
     def get_external_angular_units(self):
         return 1.0
 
-#    def get_axis_mask(self):
-#        return 7 # (x y z)
-
     def get_axis_mask(self):
+        # return 7 # (x y z)
         return 15 # (x y z a)
 
     def get_block_delete(self):
@@ -562,27 +617,4 @@ class Canon:
     def get_tool(self, pocket):
         return -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
 
-class PlotGenerator:
-    def __init__(self, inifile):
-        self.inifile = linuxcnc.ini(inifile)
-        self.inifile_path = os.path.split(inifile)[0]
-
-    def load(self, filename = None):
-#        linuxcnc.command().task_plan_synch()
-#        s = linuxcnc.stat()
-#        s.poll()
-#        unitcode = 'G%d' % (20 + (s.linear_units == 1))
-#        initcode = self.inifile.find('RS274NGC', 'RS274NGC_STARTUP_CODE') or ''
-        unitcode = 'G21'
-        initcode = 'G21 G40 G49 G80 G90 G92.1 G94 G97 M52P1'
-        self.canon = Canon()
-        parameter = tempfile.NamedTemporaryFile()
-        self.canon.parameter_file = parameter.name
-        result, seq = gcode.parse(filename, self.canon, unitcode, initcode)
-        if result > gcode.MIN_ERROR:
-            print(f'OOPS...\n{filename}\n{gcode.strerror(result)}')
-            #raise SystemExit(gcode.strerror(result))
-
-
 App()
-
