@@ -20,7 +20,6 @@ class App(ctk.CTk):
     ''' the application'''
     def __init__(self):
         super().__init__()
-#        print(root)
         ctk.set_default_color_theme('dark-blue')  # Themes: blue (default), dark-blue, green
         ctk.set_appearance_mode('dark')  # Modes: system (default), light, dark
         self.title('Phill\'s UI Test')
@@ -48,11 +47,10 @@ class App(ctk.CTk):
         self.userButtonCodes = {}
         self.showRapids = False
         self.rapidArrowLen = 5
+        self.zoomLimits = ()
 
         # create the gui
         self.create_gui()
-
-
 
         self.mainloop()
 
@@ -171,14 +169,14 @@ class App(ctk.CTk):
 ##############################################################################
 # conversational
 ##############################################################################
-    def get_plot_file(self):
-        filename = askopenfilename(title = 'File To Plot',
-                                   initialdir = self.initialDir,
-                                   filetypes = (('gcode file', '.ngc .tap .nc'), ('all files', '.*')))
-        if not filename:
-            return
-        self.initialDir = os.path.dirname(filename)
-        self.plot(filename)
+    # def get_plot_file(self):
+    #     filename = askopenfilename(title = 'File To Plot',
+    #                                initialdir = self.initialDir,
+    #                                filetypes = (('gcode file', '.ngc .tap .nc'), ('all files', '.*')))
+    #     if not filename:
+    #         return
+    #     self.initialDir = os.path.dirname(filename)
+    #     self.plot(filename)
 
     def plot(self, filename):
         #clear existing plot
@@ -254,7 +252,7 @@ class App(ctk.CTk):
         self.ax.set_title(os.path.basename(filename), color='#c0c0c0')
         plt.show()
         self.canvas.draw()
-
+        self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
 
 ##############################################################################
 # gui build
@@ -385,27 +383,149 @@ class App(ctk.CTk):
 
     def create_conversational_input_frame(self):
         ''' conversational input frame '''
+
+        def get_plot_file():
+            filename = askopenfilename(title = 'File To Plot',
+                                    initialdir = self.initialDir,
+                                    filetypes = (('gcode file', '.ngc .tap .nc'), ('all files', '.*')))
+            if not filename:
+                return
+            print(self.initialDir)
+            self.initialDir = os.path.dirname(filename)
+            self.plot(filename)
+
+        def pan_left():
+            xMin,xMax = self.ax.get_xlim()
+            pan = (xMax - xMin) /10
+            self.ax.set_xlim(xMin - pan, xMax - pan)
+            self.canvas.draw()
+
+        def pan_right():
+            xMin,xMax = self.ax.get_xlim()
+            pan = (xMax - xMin) /10
+            self.ax.set_xlim(xMin + pan, xMax + pan)
+            self.canvas.draw()
+
+        def pan_up():
+            yMin,yMax = self.ax.get_ylim()
+            pan = (yMax - yMin) / 10
+            self.ax.set_ylim(yMin + pan, yMax + pan)
+            self.canvas.draw()
+
+        def pan_down():
+            yMin,yMax = self.ax.get_ylim()
+            pan = (yMax - yMin) / 10
+            self.ax.set_ylim(yMin - pan, yMax - pan)
+            self.canvas.draw()
+
+        def zoom_in():
+            x = (self.zoomLimits[0][1] - self.zoomLimits[0][0]) / 10
+            y = (self.zoomLimits[1][1] - self.zoomLimits[1][0]) / 10
+            xMin = self.ax.get_xlim()[0] + x
+            xMax = self.ax.get_xlim()[1] - x
+            yMin = self.ax.get_ylim()[0] + y
+            yMax = self.ax.get_ylim()[1] - y
+            if xMin > xMax or yMin > yMax:
+# FIXME - delete when scaling done
+#                print(f"\nLIMIT   X({self.ax.get_xlim()[0]:7.2f}, {self.ax.get_xlim()[1]:7.2f})   Y({self.ax.get_ylim()[0]:7.2f}, {self.ax.get_ylim()[1]:7.2f})")
+#                print(f"\n  BAD   X({xMin:7.2f}, {xMax:7.2f})   Y({yMin:7.2f}, {yMax:7.2f})")
+                x = self.ax.get_xlim()[1] - self.ax.get_xlim()[0]
+                y = self.ax.get_ylim()[1] - self.ax.get_ylim()[0]
+# FIXME - delete when scaling done
+#                print(f"X:{x}   Y:{y}")
+                if x < 100 or y < 100:
+                    return
+                xMid = self.ax.get_xlim()[0] + (x / 2)
+                yMid = self.ax.get_ylim()[0] + (y / 2)
+# FIXME - delete when scaling done
+#                print(f"xMid:{xMid}   yMid:{yMid}")
+#FIXME - this needs scaling
+                if x > y:
+                    xLen = 50 * (x / y)
+                    yLen = 50
+                else:
+                    xLen = 50 * (y / x)
+                    yLen = 50
+                xMin = xMid - xLen
+                xMax = xMid + xLen
+                yMin = yMid - yLen
+                yMax = yMid + yLen
+# FIXME - delete when scaling done
+#                print(f"xMin:{xMin}   xMax:{xMax}   yMin:{yMin}   yMax:{yMax}")
+            self.ax.set_xlim(xMin, xMax)
+            self.ax.set_ylim(yMin, yMax)
+            self.canvas.draw()
+
+        def zoom_out():
+            x = (self.zoomLimits[0][1] - self.zoomLimits[0][0]) / 10
+            y = (self.zoomLimits[1][1] - self.zoomLimits[1][0]) / 10
+            self.ax.set_xlim(self.ax.get_xlim()[0] - x, self.ax.get_xlim()[1] + x)
+            self.ax.set_ylim(self.ax.get_ylim()[0] - y, self.ax.get_ylim()[1] + y)
+            self.canvas.draw()
+
+        def zoom_all():
+            self.ax.set_xlim(self.zoomLimits[0])
+            self.ax.set_ylim(self.zoomLimits[1])
+            self.canvas.draw()
+
         self.convInput = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor, width=120)
         self.convInput.grid(row=1, column=0, padx=1, pady = 1, sticky='nsew')
         plot_button = ctk.CTkButton(master = self.convInput,
-                             text = 'Plot',
-                             command = self.get_plot_file)
+                                    text = 'Plot',
+                                    command = get_plot_file)
         plot_button.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        panLeft = ctk.CTkButton(master = self.convInput,
+                                 text = 'Pan Left',
+                                 command = pan_left)
+        panLeft.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        panRight = ctk.CTkButton(master = self.convInput,
+                                 text = 'Pan Right',
+                                 command = pan_right)
+        panRight.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        panUp = ctk.CTkButton(master = self.convInput,
+                                 text = 'Pan Up',
+                                 command = pan_up)
+        panUp.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        panDown = ctk.CTkButton(master = self.convInput,
+                                 text = 'Pan Down',
+                                 command = pan_down)
+        panDown.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        zoomIn = ctk.CTkButton(master = self.convInput,
+                                 text = 'Zoom In',
+                                 command = zoom_in)
+        zoomIn.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        zoomOut = ctk.CTkButton(master = self.convInput,
+                                 text = 'Zoom Out',
+                                 command = zoom_out)
+        zoomOut.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+        zoomAll = ctk.CTkButton(master = self.convInput,
+                                 text = 'Zoom All',
+                                 command = zoom_all)
+        zoomAll.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
 
     def create_conversational_preview_frame(self):
         ''' conversational preview frame '''
         self.convPreview = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor)
         self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
-
+        # set style for matplot widgets
         plt.style.use("dark_background")
-
+        # create the matplot toplevel
         fig = plt.Figure(figsize=(1,1))
         fig.set_facecolor(self.rgb_to_hex(33, 33, 33))
         fig.subplots_adjust(bottom=0.06, left=0.08, top=0.95, right=0.99)
-
+        # add the subplot to the figure
         self.ax = fig.add_subplot(111)
         self.ax.set_facecolor(self.rgb_to_hex(33, 33, 33))
         self.ax.axis('equal')
+        self.ax.margins(0.05)
+        self.ax.use_sticky_edges = False
         self.ax.tick_params(colors=self.rgb_to_hex(233, 233, 233), which='both')
         self.ax.spines['left'].set_color(self.rgb_to_hex(233, 233, 233))
         self.ax.spines['left'].set_lw(1)
@@ -414,16 +534,17 @@ class App(ctk.CTk):
         self.ax.spines['top'].set_lw(0)
         self.ax.spines['right'].set_lw(0)
         self.ax.set_title('No File', color='orange')
-
+        # embed the figure into tkinter
         self.canvas = FigureCanvasTkAgg(fig, master=self.convPreview)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=3, pady=(3,0))#(3,10))
-
+#FIXME - maybe make our own toolbar here
+        # add the default matplotlib toolbar
         toolbar = NavigationToolbar2Tk(self.canvas, self.convPreview)
         toolbar.pack(padx=3, pady=(0,4))
         toolbar.update()
-
+        # render the figure
         self.canvas.draw()
-#        self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
+        self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
 
     def create_parameters_1_frame(self):
         ''' parameters ??? frame '''
