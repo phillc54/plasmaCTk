@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter.filedialog import askopenfilename
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 INI = os.path.join(os.path.expanduser('~'), 'linuxcnc/configs/0_ctk_metric/metric.ini')
@@ -131,8 +131,8 @@ class App(ctk.CTk):
     def user_button_setup(self):
         r = 1
         for button in range(21):
-            self.userButtons[button] = ctk.CTkButton(self.mainButtonFrame, text = f'User Button {button}')
-            self.userButtons[button].grid(row=r, column=0, padx=2, pady=2, sticky='ew')
+            self.userButtons[button] = ctk.CTkButton(self.mainButtonFrame, text = f'User Button {button}', height=40)
+            self.userButtons[button].grid(row=r, column=0, padx=2, pady=3, sticky='ew')
             self.userButtonCodes[button] = f'blah {button}'
             self.userButtons[button].bind('<ButtonPress-1>', lambda event: self.user_button_pressed(int(event.widget.cget('text').rsplit(' ', 1)[1])))
             self.userButtons[button].bind('<ButtonRelease-1>', lambda event: self.user_button_released(int(event.widget.cget('text').rsplit(' ', 1)[1])))
@@ -311,7 +311,7 @@ class App(ctk.CTk):
         self.mainButtonLbl.grid(row=0, column=0, padx=4, pady=(1, 0), sticky='new')
         self.mainButtonFrame = ctk.CTkScrollableFrame(self.mainButtons, width=144, fg_color='transparent')
         self.mainButtonFrame.grid(row=1, column=0, rowspan=2, padx=2, pady=(0, 2), sticky='nsew')
-        self.torchEnableBtn = ctk.CTkButton(self.mainButtonFrame, text = 'Torch Enable', command=self.torch_enable_clicked)
+        self.torchEnableBtn = ctk.CTkButton(self.mainButtonFrame, text = 'Torch Enable', command=self.torch_enable_clicked, height=40)
         self.torchEnableBtn.grid(row=0, column=0, padx=2, pady=(0, 2), sticky='new')
         self.user_button_setup()
 
@@ -394,6 +394,16 @@ class App(ctk.CTk):
             self.initialDir = os.path.dirname(filename)
             self.plot(filename)
 
+        convInput = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor, width=120)
+        convInput.grid(row=1, column=0, padx=1, pady = 1, sticky='nsew')
+
+        # temp button for loading file into plotter
+        plot_button = ctk.CTkButton(master = convInput, text = 'Plot', command = get_plot_file)
+        plot_button.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
+
+    def create_conversational_preview_frame(self):
+        ''' conversational preview frame '''
+
         def pan_left():
             xMin,xMax = self.ax.get_xlim()
             pan = (xMax - xMin) /10
@@ -468,52 +478,27 @@ class App(ctk.CTk):
             self.ax.set_ylim(self.zoomLimits[1])
             self.canvas.draw()
 
-        self.convInput = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor, width=120)
-        self.convInput.grid(row=1, column=0, padx=1, pady = 1, sticky='nsew')
-        plot_button = ctk.CTkButton(master = self.convInput,
-                                    text = 'Plot',
-                                    command = get_plot_file)
-        plot_button.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        panLeft = ctk.CTkButton(master = self.convInput,
-                                 text = 'Pan Left',
-                                 command = pan_left)
-        panLeft.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        panRight = ctk.CTkButton(master = self.convInput,
-                                 text = 'Pan Right',
-                                 command = pan_right)
-        panRight.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        panUp = ctk.CTkButton(master = self.convInput,
-                                 text = 'Pan Up',
-                                 command = pan_up)
-        panUp.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        panDown = ctk.CTkButton(master = self.convInput,
-                                 text = 'Pan Down',
-                                 command = pan_down)
-        panDown.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        zoomIn = ctk.CTkButton(master = self.convInput,
-                                 text = 'Zoom In',
-                                 command = zoom_in)
-        zoomIn.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        zoomOut = ctk.CTkButton(master = self.convInput,
-                                 text = 'Zoom Out',
-                                 command = zoom_out)
-        zoomOut.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-        zoomAll = ctk.CTkButton(master = self.convInput,
-                                 text = 'Zoom All',
-                                 command = zoom_all)
-        zoomAll.pack(side=tk.TOP, fill=tk.X, expand=True, padx=3, pady=3, anchor=tk.N)
-
-    def create_conversational_preview_frame(self):
-        ''' conversational preview frame '''
-        self.convPreview = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor)
-        self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
+        convPreview = ctk.CTkFrame(self.tabs.tab("Conversational"), border_width=1, border_color=self.borderColor)
+        convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
+        convPreview.grid_rowconfigure(0, weight=1)
+        convPreview.grid_columnconfigure(1, weight=1)
+        previewButtons = ctk.CTkFrame(convPreview, fg_color='transparent', width=20)#, border_width=1, border_color=self.borderColor)
+        previewButtons.grid(row=0, column=0, padx=3, pady=3, sticky='nsew')
+        previewButtons.grid_rowconfigure((0, 10), weight=1)
+        zoomIn = ctk.CTkButton(master = previewButtons, text = '+', command = zoom_in, width=40, height=40, font=('', 24))
+        zoomIn.grid(row=1, column=0, padx=3, pady=3, sticky='ew')
+        zoomOut = ctk.CTkButton(master = previewButtons, text = '-', command = zoom_out, width=40, height=40, font=('', 24))
+        zoomOut.grid(row=2, column=0, padx=3, pady=3, sticky='ew')
+        zoomAll = ctk.CTkButton(master = previewButtons, text = '\u25cb', command = zoom_all, width=40, height=40, font=('', 24))
+        zoomAll.grid(row=4, column=0, padx=3, pady=23, sticky='ew')
+        panLeft = ctk.CTkButton(master = previewButtons, text = '\u2190', command = pan_left, width=40, height=40, font=('', 24))
+        panLeft.grid(row=6, column=0, padx=3, pady=3, sticky='ew')
+        panRight = ctk.CTkButton(master = previewButtons, text = '\u2192', command = pan_right, width=40, height=40, font=('', 24))
+        panRight.grid(row=7, column=0, padx=3, pady=3, sticky='ew')
+        panUp = ctk.CTkButton(master = previewButtons, text = '\u2191', command = pan_up, width=40, height=40, font=('', 24))
+        panUp.grid(row=8, column=0, padx=3, pady=3, sticky='ew')
+        panDown = ctk.CTkButton(master = previewButtons, text = '\u2192', command = pan_down, width=40, height=40, font=('', 24))
+        panDown.grid(row=9, column=0, padx=3, pady=3, sticky='ew')
         # set style for matplot widgets
         plt.style.use("dark_background")
         # create the matplot toplevel
@@ -535,13 +520,8 @@ class App(ctk.CTk):
         self.ax.spines['right'].set_lw(0)
         self.ax.set_title('No File', color='orange')
         # embed the figure into tkinter
-        self.canvas = FigureCanvasTkAgg(fig, master=self.convPreview)
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=3, pady=(3,0))#(3,10))
-#FIXME - maybe make our own toolbar here
-        # add the default matplotlib toolbar
-        toolbar = NavigationToolbar2Tk(self.canvas, self.convPreview)
-        toolbar.pack(padx=3, pady=(0,4))
-        toolbar.update()
+        self.canvas = FigureCanvasTkAgg(fig, master=convPreview)
+        self.canvas.get_tk_widget().grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
         # render the figure
         self.canvas.draw()
         self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
