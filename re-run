@@ -1,0 +1,5 @@
+#!/bin/bash
+
+halrun -U
+#python3 /home/phill/git/plasmactk/app.py
+/home/phill/git/linuxcnc-dev/scripts/linuxcnc /home/phill/linuxcnc/configs/0_ctk_metric/metric.ini
