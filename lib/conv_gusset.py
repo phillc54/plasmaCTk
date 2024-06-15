@@ -78,7 +78,7 @@ def widgets(self):
     #connections
     self.ctButton.configure(command=lambda:self.cut_type_clicked())
     self.previewC.configure(command=lambda:preview(self))
-    self.rButton.configure(command=lambda:radius_button_pressed(self, self.rbValue))
+    self.rButton.configure(command=lambda:radius_button_pressed(self, self.rbButton.cget('text')))
     #add to layout
     self.matLabel.grid(column=0, row=0, padx=3, pady=3, sticky='e')
     self.matCombo.grid(column=1, row=0, padx=3, pady=3, columnspan=3, sticky='ew')

@@ -75,7 +75,7 @@ def reload_clicked(self):
         self.settingsExited = 2
 
 def exit_clicked(self):
-    for child in self.toolFrame.winfo_children():
+    for child in self.parent.convTools.winfo_children():
         if child.winfo_class() == 'Radiobutton':
             child.configure(state = 'normal')
     self.restore_buttons()
@@ -85,12 +85,12 @@ def exit_clicked(self):
 
 def load(self, preAmble, leadin, smallHole, postAmble=None):
     postAmble = postAmble if postAmble else preAmble
-    self.preAmble = 'G21'#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Preamble', preAmble, str)
-    self.postAmble = 'G21'#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Postamble', postAmble, str)
+    self.preAmble = preAmble#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Preamble', preAmble, str)
+    self.postAmble = postAmble#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Postamble', postAmble, str)
     self.origin = 0#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Origin', 0, int)
-    self.leadIn = 5#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Leadin', leadin, float)
+    self.leadIn = leadin#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Leadin', leadin, float)
     self.leadOut = 0#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Leadout', 0, float)
-    self.smallHoleDia = 32#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Hole diameter', smallHole, float)
+    self.smallHoleDia = smallHole#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Hole diameter', smallHole, float)
     self.smallHoleSpeed = 60#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Hole speed', 60, int)
 
 def show(self):
@@ -101,11 +101,14 @@ def show(self):
     self.shValue.set(f"{self.smallHoleDia}")
     self.hsValue.set(f"{self.smallHoleSpeed}")
     if self.origin:
-        self.spbValue.set('CENTER')
+#        self.spbValue.set('CENTER')
+        self.spButton.configure(text = _('CENTER'))
     else:
-        self.spbValue.set('BTM LEFT')
+#        self.spbValue.set('BTM LEFT')
+        self.spButton.configure(text = _('BTM LEFT'))
 
 def widgets(self):
+    print(f"self: {self}")
     # connections
     self.spButton.configure(command=lambda:self.start_point_clicked())
     self.saveS.configure(command=lambda:save_clicked(self))
@@ -116,23 +119,23 @@ def widgets(self):
     self.addC.grid_remove()
     self.undoC.grid_remove()
     # add to layout
-    self.preLabel.grid(column=0, row=0, pady=(4,0), sticky='e')
-    self.preEntry.grid(column=1, row=0, pady=(4,0), sticky='ew', columnspan=3)
-    self.pstLabel.grid(column=0, row=1, pady=(4,0), sticky='e')
-    self.pstEntry.grid(column=1, row=1, pady=(4,0), sticky='ew', columnspan=3)
-    self.llLabel.grid(column=0, row=2, pady=(4,0), sticky='ew', columnspan=4)
-    self.liLabel.grid(column=0, row=3, pady=(4,0), sticky='e')
-    self.liEntry.grid(column=1, row=3, pady=(4,0), sticky='w')
-    self.loLabel.grid(column=2, row=3, pady=(4,0), sticky='e')
-    self.loEntry.grid(column=3, row=3, pady=(4,0), sticky='w')
-    self.shLabel.grid(column=0, row=4, pady=(4,0), sticky='ew', columnspan=4)
-    self.dLabel.grid(column=0, row=5, pady=(4,0), sticky='e')
-    self.shEntry.grid(column=1, row=5, pady=(4,0), sticky='w')
-    self.hsLabel.grid(column=2, row=5, pady=(4,0), sticky='e')
-    self.hsEntry.grid(column=3, row=5, pady=(4,0), sticky='w')
-    self.pvLabel.grid(column=0, row=6, pady=(4,0), sticky='ew', columnspan=4)
-    self.spLabel.grid(column=0, row=7, pady=(4,0), sticky='e')
-    self.spButton.grid(column=1, row=7, pady=(4,0), sticky='w')
+    self.preLabel.grid(column=0, row=0, padx=3, pady=3, sticky='e')
+    self.preEntry.grid(column=1, row=0, padx=3, pady=3, sticky='ew', columnspan=3)
+    self.pstLabel.grid(column=0, row=1, padx=3, pady=3, sticky='e')
+    self.pstEntry.grid(column=1, row=1, padx=3, pady=3, sticky='ew', columnspan=3)
+    self.llLabel.grid(column=0, row=2, padx=3, pady=3, sticky='ew', columnspan=4)
+    self.liLabel.grid(column=0, row=3, padx=3, pady=3, sticky='e')
+    self.liEntry.grid(column=1, row=3, padx=3, pady=3, sticky='w')
+    self.loLabel.grid(column=2, row=3, padx=3, pady=3, sticky='e')
+    self.loEntry.grid(column=3, row=3, padx=3, pady=3, sticky='w')
+    self.shLabel.grid(column=0, row=4, padx=3, pady=3, sticky='ew', columnspan=4)
+    self.dLabel.grid(column=0, row=5, padx=3, pady=3, sticky='e')
+    self.shEntry.grid(column=1, row=5, padx=3, pady=3, sticky='w')
+    self.hsLabel.grid(column=2, row=5, padx=3, pady=3, sticky='e')
+    self.hsEntry.grid(column=3, row=5, padx=3, pady=3, sticky='w')
+    self.pvLabel.grid(column=0, row=6, padx=3, pady=3, sticky='ew', columnspan=4)
+    self.spLabel.grid(column=0, row=7, padx=3, pady=3, sticky='e')
+    self.spButton.grid(column=1, row=7, padx=3, pady=3, sticky='w')
     self.saveS.grid(column=0, row=12)
     self.reloadS.grid(column=1, row=12, columnspan=2)
     self.exitS.grid(column=3, row=12)

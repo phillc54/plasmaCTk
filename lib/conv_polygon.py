@@ -46,7 +46,7 @@ def preview(self):
             isCenter, self.xsValue.get(), self.ysValue.get(), \
             kerfWidth, isExternal, \
             self.sValue.get(), self.dValue.get(), self.aValue.get(), \
-            self.polyCombo.getvalue(), self.dLabel['text'])
+            self.polyCombo.get(), self.dLabel.cget('text'))
     if error:
         self.dialog_show_ok(_('Polygon Error'), error)
     else:
