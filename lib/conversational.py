@@ -5,6 +5,8 @@ import sys
 import gcode
 import math
 import customtkinter as ctk
+from customtkinter import filedialog
+from CTkMessagebox import CTkMessagebox
 import tkinter as tk
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -50,6 +52,7 @@ if not os.path.isdir(TMPPATH):
 class Conversational():
     def __init__(self, parent, unitsPerMm, materials, matNum, standalone=False):
         super().__init__()
+        print('conversational is initialized')
         self.parent = parent
         self.convFirstRun = True
         self.rE = parent.tk.eval
@@ -59,8 +62,9 @@ class Conversational():
         self.materials = materials
         self.matIndex = matNum
         self.standalone = standalone
-
-        print(f"self.unitsPerMm:{self.unitsPerMm}   self.standalone={self.standalone}")
+        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files')
+        self.existingFile = None
+#        print(f"self.unitsPerMm:{self.unitsPerMm}   self.standalone={self.standalone}")
 #        self.materials = materialFileDict
 #        self.matIndex = matIndex
 
@@ -76,7 +80,6 @@ class Conversational():
 #        self.wcs_rotation = wcs_rotation
 #        self.pVars = pVars
 #        self.conv_toggle = conv_toggle
-#        self.plasmacPopUp = plasmacPopUp
 #        self.o = o
         self.shapeLen = {'x':None, 'y':None}
 #        self.combobox = combobox
@@ -87,11 +90,12 @@ class Conversational():
         self.filteredBkp = os.path.join(TMPPATH, 'filtered_bkp.ngc')
         self.savedSettings = {'start_pos':None, 'cut_type':None, 'lead_in':None, 'lead_out':None}
         self.buttonState = {'newC':False, 'saveC':False, 'sendC':False, 'settingsC':False}
-        self.convButton = False
-        self.oldConvButton = False
+        self.convButton = 'line'
+        self.oldConvButton = 'line'
         self.module = None
         self.oldModule = None
         self.convLine = {}
+#FIXME - different for standalone vs normal
         if self.unitsPerMm == 1:
             smallHole = 32
             leadin = 5
@@ -119,13 +123,13 @@ class Conversational():
         self.polyCombo.configure(values=[_('CIRCUMSCRIBED'), _('INSCRIBED'), _('SIDE LENGTH')])
         self.lineCombo.configure(values=[_('LINE POINT ~ POINT'), _('LINE BY ANGLE'), _('ARC 3P'),\
                                _('ARC 2P +RADIUS'), _('ARC ANGLE +RADIUS')])
-#        self.addC.configure(command = lambda:self.add_shape_to_file())
         self.addC.configure(command = self.add_shape_to_file)
-        self.undoC.configure(command = lambda:self.undo_shape())
-        self.newC.configure(command = lambda:self.new_pressed(True))
-        self.saveC.configure(command = lambda:self.save_pressed())
-        self.settingsC.configure(command = lambda:self.settings_pressed())
-        self.sendC.configure(command = lambda:self.send_pressed())
+        self.loadC.configure(command = self.load_file)
+        self.undoC.configure(command = self.undo_shape)
+        self.newC.configure(command = lambda: self.new_pressed(True))
+        self.saveC.configure(command = self.save_pressed)
+        self.settingsC.configure(command = self.settings_pressed)
+        self.sendC.configure(command = self.send_pressed)
         for entry in self.entries:
             #entry.bind('<KeyRelease>', self.auto_preview) # plays havoc with good error detection
             #entry.bind('<Return>', self.auto_preview, add='+')
@@ -136,13 +140,18 @@ class Conversational():
         self.entry_validation()
         self.convFirstRun = False
 
-#    def start(self, materialFileDict, matIndex, existingFile, g5xIndex, setViewZ):
+#    def start(self, materialFileDict, matIndex, existingFile, g5xIndex):
     def start(self):#, metric, materialFileDict, matIndex):
+        self.buttonOnColor = self.spButton.cget('hover_color')
+        self.buttonOffColor = self.spButton.cget('fg_color')
+        print(f"button colors:   {self.buttonOnColor}   {self.buttonOffColor}")
+        self.g5xIndex = 1 # do we need this without a real preview ???
+
 #        self.metric = metric
 #        print(f"self.metric:{self.metric}   matIndex:{matIndex}   materialFileDict:{materialFileDict}")
-        print(self.unitsPerMm)
-        print(self.materials[1]['name'])
-        print(self.matIndex)
+#        print(self.unitsPerMm)
+#        print(self.materials[1]['name'])
+#        print(self.matIndex)
 
 
 
@@ -154,7 +163,6 @@ class Conversational():
         # self.matIndex = matIndex
 #        self.existingFile = existingFile
 #        self.g5xIndex = g5xIndex
-#        self.setViewZ = setViewZ
         self.previewActive = False
         self.settingsExited = False
         self.validShape = False
@@ -162,6 +170,7 @@ class Conversational():
         self.ocEntry.configure(state = 'disabled')
         self.undoC.configure(text = _('RELOAD'))
         self.addC.configure(state = 'disabled')
+        self.loadC.configure(state = 'normal')
         self.newC.configure(state = 'normal')
         self.saveC.configure(state = 'disabled')
         self.sendC.configure(state = 'disabled')
@@ -170,21 +179,13 @@ class Conversational():
         self.lineCombo.set(self.lineCombo.cget('values')[0])
         self.convLine = {}
         self.convBlock = [False, False]
+        values = []
         for m in self.materials:
-            #values = [str(m) + ': ' + self.materials[m]['name'] for m in self.materials]
-            values = [f"{m}:{self.materials[m]['name']}" for m in self.materials]
+            values.append(f"{m}:{self.materials[m]['name']}")
             self.matCombo.configure(values=values)
-        self.matCombo.set(values[self.matIndex])#        self.matCombo.setvalue(f"@{self.matIndex}")
-#        longest = max(values, key=len)
-#        tmpLabel = tk.Label(text=longest)
-#        self.matCombo['listboxwidth'] = tmpLabel.winfo_reqwidth() + 200
-        if self.oldConvButton:
-            self.toolButton[self.convShapes.index(self.oldConvButton)].select()
-            self.shape_request(self.oldConvButton)
-        else:
-#            self.toolButton[0].select()
-            self.toolButton[0].configure(border_color = 'red')
-            self.shape_request('line')
+        self.matCombo.set(values[self.matIndex])
+        self.convButton = self.oldConvButton
+        self.shape_request(self.oldConvButton)
         # if self.existingFile:
         #     if 'shape.ngc' not in self.existingFile:
         #         copy(self.filteredBkp, self.fNgc)
@@ -202,31 +203,47 @@ class Conversational():
         print(f"file_loader   file{file}   a:{a}   b:{b}")
         self.plot(file)
 
-    def plot(self, filename):
+    def load_file(self):
+        filetypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
+        file = None
+        file = filedialog.askopenfile(initialdir=self.initialdir, filetypes=filetypes)
+        if file:
+            self.initialdir = os.path.dirname(file.name)
 
-#FIXME - we make a temp file to hide f#<_hal[plasmac.cut-feed-rate]> for standalone mode
-        tmp = os.path.join(TMPPATH, 'parse_tmp.ngc')
-        with open(filename, 'r') as inFile:
-            with open(tmp, 'w') as outFile:
-                for line in inFile:
-                    if len(line.strip()) and line.strip()[0].upper() == 'F':
-                        line = 'F1\n'
-                    outFile.write(line)
+            copy(file.name, self.fNgc)
+            copy(file.name, self.fNgcBkp)
+            self.existingFile = file.name
+            self.plot(file.name)
 
-
-
+    def plot(self, filename, title=True):
+#        print('PLOT', filename)
+        # if we are in stand-alone mode we need to make a
+        # temp file because we cannot use named parameters
+        if self.standalone:
+            file = os.path.join(TMPPATH, 'stand-alone.tmp')
+            with open(filename, 'r') as inFile:
+                with open(file, 'w') as outFile:
+                    for line in inFile:
+                        if len(line.strip()) and line.strip()[0].upper() == 'F':
+                            line = 'F1\n'
+                        line = line.replace('#<_ini[axis_z]max_limit>', '1')
+                        outFile.write(line)
+            name = f"{os.path.basename(file)} from {os.path.basename(filename)}"
+        else:
+            file = filename
+            name = os.path.basename(filename)
+        if not title:
+            name = ''
+#        print('PARSE', filename)
         #clear existing plot
         self.ax.clear()
         # parse the gcode file
         unitcode = 'G21 G49'
         initcode = 'G21 G40 G49 G80 G90 G92.1 G94 G97 M52P1'
         self.canon = Canon()
-        # parameter = tempfile.NamedTemporaryFile()
-        # self.canon.parameter_file = parameter.name
         parameter = os.path.join(TMPPATH, 'parameters')
         self.canon.parameter_file = parameter
-#        result, seq = gcode.parse(filename, self.canon, unitcode, initcode)
-        result, seq = gcode.parse(tmp, self.canon, unitcode, initcode)
+        result, seq = gcode.parse(file, self.canon, unitcode, initcode)
         if result > gcode.MIN_ERROR:
             self.ax.set_title(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
             plt.show()
@@ -288,13 +305,12 @@ class Conversational():
                 self.ax.add_patch(shape)
         # plot the shapes
         self.ax.plot()
-        self.ax.set_title(os.path.basename(filename), color='#c0c0c0')
+        self.ax.set_title(name, color='#c0c0c0')
         plt.show()
         self.canvas.draw()
         self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
 
     def entry_validation(self):
-#        self.vcmd = (self.r.register(self.validate_entries))
         self.vcmd = (self.parent.register(self.validate_entries))
         for w in self.uInts:
             w.configure(validate='key', validatecommand=(self.vcmd, 'int', '%P', '%W'))
@@ -304,7 +320,6 @@ class Conversational():
             w.configure(validate='key', validatecommand=(self.vcmd, 'pos', '%P', '%W'))
 
     def validate_entries(self, style, value, widget):
-#        widget = self.r.nametowidget(widget)
         widget = self.parent.nametowidget(widget)
         # determine the type of circle
         if self.convButton == 'circle' and (widget == self.dEntry or widget == self.shEntry):
@@ -410,19 +425,18 @@ class Conversational():
             self.invalidLeads = 0
 
     # dialog call from shapes
-    def dialog_show_ok(self, title, text):
-        # reply = self.plasmacPopUp('error', title, text).reply
-        # return reply
-        print(f"dialog_show_ok  title:{title}  text:{text}")
+    def dialog_show_ok(self, title, message):
+        return CTkMessagebox(master=self.parent, title=title, message=message, icon='warning').get()
 
     def new_pressed(self, buttonPressed):
         if buttonPressed and (self.saveC.cget('state') or self.sendC.cget('state') or self.previewActive):
             title = _('Unsaved Shape')
             msg0 = _('You have an unsaved, unsent, or active previewed shape')
             msg1 = _('If you continue it will be deleted')
-            # if not self.plasmacPopUp('yesno', title, f"{msg0}\n\n{msg1}\n").reply:
-            #     return
-            print(f"{title}: {msg0}\n\n{msg1}\n")
+            message = f"{msg0}\n\n{msg1}\n"
+            reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='question', options=['Continue', 'Cancel']).get()
+            if reply == 'Cancel':
+                return
         if self.oldConvButton == 'line':
             if self.lineCombo.get() == _('LINE POINT ~ POINT'):
                 CONVLIN.set_line_point_to_point(self)
@@ -438,7 +452,7 @@ class Conversational():
             outNgc.write('(new conversational file)\nM2\n')
         copy(self.fNgc, self.fTmp)
         copy(self.fNgc, self.fNgcBkp)
-        self.file_loader(self.fNgc, True, False)
+        self.plot(self.fNgc, title=False)
         self.saveC.configure(state = 'disabled')
         self.sendC.configure(state = 'disabled')
         self.validShape = False
@@ -449,24 +463,22 @@ class Conversational():
         self.preview_button_pressed(False)
 
     def save_pressed(self):
-        self.parent.convInput.unbind_all('<KeyRelease>')
-        self.parent.convInput.unbind_all('<Return>')
+#        self.parent.convInput.unbind_all('<KeyRelease>')
+#        self.parent.convInput.unbind_all('<Return>')
         title = _('Save Error')
         with open(self.fNgc, 'r') as inFile:
             for line in inFile:
                 if '(new conversational file)' in line:
-                    msg0 = _('An empty file cannot be saved')
-                    # self.plasmacPopUp('error', title, msg0)
-                    print(f"{title}: {msg0}")
+                    message = _('An empty file cannot be saved')
+                    CTkMessagebox(master=self.parent, title=title, message=message, icon='warning')
                     return
 #        self.vkb_show() if we add a virtual keyboard ??????????????????????????
-        fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'),
-                 ('All Files', '*.*')]
-        defaultExt = '.ngc'
-#FIXME need a file selector here
+        filetypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
+        defaultextension = '.ngc'
         file = None
-        #file = asksaveasfilename(filetypes=fileTypes, defaultextension=defaultExt)
+        file = filedialog.asksaveasfilename(filetypes=filetypes, defaultextension=defaultextension)
         if file:
+             print(file)
              copy(self.fNgc, file)
              self.saveC.configure(state = 'disabled')
 #        self.vkb_show(True) if we add a virtual keyboard ??????????????????????
@@ -505,8 +517,8 @@ class Conversational():
         self.existingFile = self.fNgc
         self.saveC.configure(state = 'disabled')
         self.sendC.configure(state = 'disabled')
-#FIXME we need to load the file here
-        print(f"we need to load the file here {self.fNgc}")
+#FIXME we need to load the file in linuxcnc here
+        print(f"we need to load the file in linuxcnc here {self.fNgc}")
         #self.file_loader(self.fNgc, False, False)
 #        self.conv_toggle(0, True)
 
@@ -520,30 +532,35 @@ class Conversational():
             with open(self.fNgc) as inFile:
                 for line in inFile:
                     if '(new conversational file)' in line:
-                        msg0 = _('An empty file cannot be arrayed, rotated, or scaled')
-                        # self.plasmacPopUp('error', title, msg0)
-                        print(msg0)
-#                        return True
+                        message = _('An empty file cannot be arrayed, rotated, or scaled')
+                        CTkMessagebox(master=self.parent, title=title, message=message, icon='warning')
+                        return True
                     # see if we can do something about NURBS blocks down the track
                     elif 'g5.2' in line.lower() or 'g5.3' in line.lower():
-                        msg0 = _('Cannot scale a GCode NURBS block')
-                        # self.plasmacPopUp('error', title, msg0)
-                        print(msg0)
+                        message = _('Cannot scale a GCode NURBS block')
+                        CTkMessagebox(master=self.parent, title=title, message=message, icon='warning')
                         return True
                     elif 'M3' in line or 'm3' in line:
                         break
         return
 
     def shape_request(self, shape): #, material):
-        print(f"shape_request={shape}   {self.toolButton[self.convShapes.index(shape)].cget('text')}")
-
+#        print(f"shape_request={shape}")#   {self.toolButton[self.convShapes.index(shape)].cget('text')}")
 #            self.toolButton[self.convShapes.index(self.oldConvButton)].select()
-
-
-
         if shape == 'closer':
-#            self.conv_toggle(0)
+            if self.standalone:
+                title = 'Close'
+                message = 'Do you wish to close this stand-alone conversational session'
+                reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='question', options=['Yes', 'No']).get()
+                if reply == 'Yes':
+                    sys.exit()
+            else:
+                print('WE NEED TO SHOW THE MAIN TAB HERE')
             return
+        if not self.settingsExited:
+            if self.previewActive and self.active_shape():
+                return
+            self.preview_button_pressed(False)
         self.oldModule = self.module
         if shape == 'block':
             # if self.o.canon is not None:
@@ -568,12 +585,10 @@ class Conversational():
         else: return
         if self.parent.comp['development']:
             reload(self.module)
-#        if not self.settingsExited:
-#            if self.previewActive and self.active_shape():
-#                return
-#            self.preview_button_pressed(False)
+        self.oldConvButton = self.convButton
         self.convButton = shape
-        self.oldConvButton = shape
+        self.toolButton[self.convShapes.index(self.oldConvButton)].configure(state='enabled', fg_color=self.buttonOffColor)
+        self.toolButton[self.convShapes.index(self.convButton)].configure(state='disabled', fg_color=self.buttonOnColor)
         self.settingsC.configure(state = 'normal')
         self.previewC.configure(state = 'normal')
         self.loLabel.configure(state = 'normal')
@@ -611,18 +626,11 @@ class Conversational():
                 self.sendC.configure(state = 'normal')
             self.undoC.configure(text=_('RELOAD'))
             self.addC.configure(state = 'disabled')
- #       self.setViewZ()
 
     def active_shape(self):
-        for child in self.parent.convTools.winfo_children():
-            child.deselect()
         title = _('Active Preview')
-        msg0 = _('Cannot continue with an active previewed shape')
-        # reply = self.plasmacPopUp('warn', title, f"{msg0}\n").reply
-        print(f"{title}: {msg0}")
-        reply = None
-        if self.oldConvButton:
-            self.toolButton[self.convShapes.index(self.oldConvButton)].select()
+        message = _('Cannot continue with an active previewed shape')
+        reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='warning').get()
         self.module = self.oldModule
         return reply
 
@@ -653,17 +661,20 @@ class Conversational():
                 name = os.path.basename(self.existingFile)
                 msg0 = _('The original file will be loaded')
                 msg1 = _('If you continue all changes will be deleted')
-                # if not self.plasmacPopUp('yesno', title, f"{msg0}:\n\n{name}\n\n{msg1}\n").reply:
-                #     return(True)
-                print(f"{title}: {msg0}:\n\n{name}\n\n{msg1}\n")
+                message = f"{msg0}:\n\n{name}\n\n{msg1}\n"
+                reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='question', options=['Continue', 'Cancel']).get()
+                if reply == 'Cancel':
+                    return(True)
             else:
                 msg0 = _('An empty file will be loaded')
                 msg1 = _('If you continue all changes will be deleted')
-                # if not self.plasmacPopUp('yesno', title, f"{msg0}\n\n{msg1}\n").reply:
-                #     return(True)
-                print(f"{title}: {msg0}\n\n{msg1}\n")
+                message = f"{msg0}\n\n{msg1}\n"
+                reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='question', options=['Continue', 'Cancel']).get()
+                if reply == 'Cancel':
+                    return(True)
             if self.existingFile:
                 copy(self.existingFile, self.fNgcBkp)
+                self.plot(self.existingFile)
             else:
                 with open(self.fNgcBkp, 'w') as outNgc:
                     outNgc.write('(new conversational file)\nM2\n')
@@ -693,7 +704,7 @@ class Conversational():
         # undo the shape
         if os.path.exists(self.fNgcBkp):
             copy(self.fNgcBkp, self.fNgc)
-            self.file_loader(self.fNgc, True, False)
+            self.plot(self.fNgc)
             self.addC.configure(state = 'disabled')
             if not self.validShape:
                 self.undoC.configure(state = 'disabled')
@@ -708,17 +719,10 @@ class Conversational():
         self.saveC.configure(state = 'normal')
         self.sendC.configure(state = 'normal')
         self.preview_button_pressed(False)
-
-        print(f"button={self.convButton}")
         if self.convButton == 'line':
-        # print(f"button={self.convButton.cget('text')}")
-        # if self.convButton.cget('text') == 'line':
             self.convLine['convAddSegment'] = self.convLine['gcodeLine']
             self.convLine['xLineStart'] = self.convLine['xLineEnd']
             self.convLine['yLineStart'] = self.convLine['yLineEnd']
-
-            print(f"newX={self.convLine['xLineEnd']}   newY={self.convLine['yLineEnd']}")
-
             self.l1Value.set(f"{self.convLine['xLineEnd']:0.3f}")
             self.l2Value.set(f"{self.convLine['yLineEnd']:0.3f}")
             self.convLine['addSegment'] = 1
@@ -727,6 +731,7 @@ class Conversational():
             self.previewActive = False
 
     def clear_widgets(self):
+        print('clear_widgets')
         for child in self.parent.convInput.winfo_children():
             if not self.settingsExited and isinstance(child, tk.Entry):
                 if child.winfo_name() == str(getattr(self, 'liEntry')).rsplit('.',1)[1]:
@@ -776,7 +781,6 @@ class Conversational():
         self.module.auto_preview(self)
 
     def material_changed(self, material):
-#        self.matCombo.selection_clear()
         self.module.auto_preview(self)
 
     def pan_left(self):
@@ -856,7 +860,11 @@ class Conversational():
     def show_common_widgets(self):
         self.spacer.grid(column=0, row=11, sticky='ns')
         self.previewC.grid(column=0, row=12, padx=3, pady=3)
-        self.addC.grid(column=1, row=12, columnspan=2, pady=3)
+        if self.standalone:
+            self.loadC.grid(column=1, row=12, padx=3, pady=3)
+            self.addC.grid(column=2, row=12, padx=3, pady=3)
+        else:
+            self.addC.grid(column=1, row=12, columnspan=2, pady=3)
         self.undoC.grid(column=3, row=12, padx=3, pady=3)
         self.sepline.grid(column=0, row=13, columnspan=4, sticky='ew', padx=8, pady=3)
         self.newC.grid(column=0, row=14, padx=3, pady=3)
@@ -891,10 +899,10 @@ class Conversational():
         self.ctLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('CUT TYPE'))
         self.ctButton = ctk.CTkButton(self.parent.convInput, width=width)
         self.xsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('X ORIGIN'))
-        self.xsValue = tk.StringVar()
+        self.xsValue = tk.StringVar(value='0')
         self.xsEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.xsValue)
         self.ysLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Y ORIGIN'))
-        self.ysValue = tk.StringVar()
+        self.ysValue = tk.StringVar(value='0')
         self.ysEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.ysValue)
         self.liLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LEAD IN'))
         self.liValue = tk.StringVar()
@@ -964,10 +972,10 @@ class Conversational():
         self.rValue = tk.StringVar()
         self.rEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rValue)
         self.saLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SEC ANGLE'))
-        self.saValue = tk.StringVar()
+        self.saValue = tk.StringVar(value='0')
         self.saEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.saValue)
         self.aLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ANGLE'))
-        self.aValue = tk.StringVar()
+        self.aValue = tk.StringVar(value='0')
         self.aEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.aValue)
         self.r1Button = ctk.CTkButton(self.parent.convInput, width=width)
         self.r1Value = tk.StringVar()
@@ -984,24 +992,24 @@ class Conversational():
         # block
         self.ccLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('COLUMNS'))
         self.cnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
-        self.cnValue = tk.StringVar()
+        self.cnValue = tk.StringVar(value='1')
         self.cnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.cnValue)
         self.coLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
-        self.coValue = tk.StringVar()
+        self.coValue = tk.StringVar(value='0')
         self.coEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.coValue)
         self.rrLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('ROWS'))
         self.rnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
-        self.rnValue = tk.StringVar()
+        self.rnValue = tk.StringVar(value='1')
         self.rnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rnValue)
         self.roLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
-        self.roValue = tk.StringVar()
+        self.roValue = tk.StringVar(value='0')
         self.roEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.roValue)
         self.bsLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('SHAPE'))
         self.scLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SCALE'))
-        self.scValue = tk.StringVar()
+        self.scValue = tk.StringVar(value='1')
         self.scEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.scValue)
         self.rtLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ROTATION'))
-        self.rtValue = tk.StringVar()
+        self.rtValue = tk.StringVar(value='0')
         self.rtEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rtValue)
         self.mirror = ctk.CTkButton(self.parent.convInput, width=width, text=_('MIRROR'))
         self.flip = ctk.CTkButton(self.parent.convInput, width=width, text=_('FLIP'))
@@ -1049,6 +1057,7 @@ class Conversational():
         # bottom
         self.previewC = ctk.CTkButton(self.parent.convInput, width=width, text=_('PREVIEW'))
         self.addC = ctk.CTkButton(self.parent.convInput, width=width, text=_('ADD'))
+        self.loadC = ctk.CTkButton(self.parent.convInput, width=width, text=_('LOAD'))
         self.undoC = ctk.CTkButton(self.parent.convInput, width=width, text=_('UNDO'))
         self.newC = ctk.CTkButton(self.parent.convInput, width=width, text=_('NEW'))
         self.saveC = ctk.CTkButton(self.parent.convInput, width=width, text=_('SAVE'))
@@ -1056,9 +1065,7 @@ class Conversational():
         self.sendC = ctk.CTkButton(self.parent.convInput, width=width, text=_('SEND'))
         # spacer and separator
         self.spacer = ctk.CTkLabel(self.parent.convInput, text='')
-#        self.sepline = hSeparator(self.parent.convInput)
         self.sepline = ctk.CTkFrame(self.parent.convInput, width = 120, height = 2, fg_color = '#808080')
-
         # get default background color
         self.bBackColor = self.sendC.cget('fg_color')
         # create lists of entries
@@ -1078,8 +1085,8 @@ class Conversational():
         for entry in self.uFloats: self.entries.append(entry)
         self.buttons   = [self.spButton, self.ctButton, self.ocButton, self.rButton, self.r1Button, \
                           self.r2Button, self.r3Button, self.r4Button, self.mirror, self.flip, \
-                          self.g23Arc, self.saveS, self.reloadS, self.exitS, self.previewC, \
-                          self.addC, self.undoC, self.newC, self.saveC, self.settingsC, self.sendC]
+                          self.g23Arc, self.saveS, self.reloadS, self.exitS, self.previewC, self.addC, \
+                          self.loadC, self.undoC, self.newC, self.saveC, self.settingsC, self.sendC]
 #FIXME - takefocus not applicable for ctk
         # for button in self.buttons:
         #     print(f"button: {button._name}")
@@ -1265,14 +1272,10 @@ class Canon:
     def get_tool(self, pocket):
         return -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
 
-
 ''' The following allows conversational to run in standalone mode
-
     If LinuxCNC is run in place it requires:
         a path to the root of the repository
         a path to a material file, if not specified then a single basic material will be allocated
-
-
     Options are:
         -i          - Imperial mode, metric is the default
         -l "path"   - Path to root of rip repository eg ~/linuxcnc-dev

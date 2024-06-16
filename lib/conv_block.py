@@ -42,7 +42,7 @@ def preview(self):
     if error:
         self.dialog_show_ok(_('Block Error'), error)
     else:
-        self.file_loader(self.fNgc, True, False)
+        self.plot(self.fNgc)
         self.addC.configure(state = 'normal')
         self.undoC.configure(state = 'normal')
         self.preview_button_pressed(True)
@@ -69,10 +69,9 @@ def flip_shape(self):
     preview(self)
 
 def get_parameters(self):
-    self.wcs_rotation('get')
+#    self.wcs_rotation('get')
     inCode = open(self.fNgc, 'r')
     self.convBlock = [False, False]
-#    isConvBlock = False
     self.convUnits = [1, None]
     self.convMirror = 1
     self.convMirrorToggle = False
@@ -83,7 +82,6 @@ def get_parameters(self):
         # maybe check here for old style rotate, scale, and array
         if line.startswith(';conversational block'):
             self.convBlock = [True, True]
-#            isConvBlock = True
         elif 'G21' in line.upper().replace(' ', '') and self.unitsPerMm != 1:
             self.convUnits = [25.4, 'G21']
         elif 'G20' in line.upper().replace(' ', '') and self.unitsPerMm == 1:
@@ -91,8 +89,7 @@ def get_parameters(self):
         elif 'm3' in line:
             break
     inCode.seek(0, 0)
-    if self.convBlock[0]:
-#    if isConvBlock:
+    if self.convBlock[0]: # if it is a ConvBlock:
         for line in inCode:
             line = line.strip().lower()
             if line.startswith('#<array_x_offset>'):
