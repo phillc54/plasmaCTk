@@ -8,40 +8,11 @@ import customtkinter as ctk
 from customtkinter import filedialog
 from CTkMessagebox import CTkMessagebox
 import tkinter as tk
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from shutil import copy
 from importlib import reload
 from PIL import Image
 
-# allow path for rip repository if stand-alone
-if __name__ == '__main__' and '-l' in sys.argv:
-    path = sys.argv[sys.argv.index('-l') + 1] if '-l' != sys.argv[-1] else ''
-    if not os.path.isdir(path):
-        error  = f"\nError: invalid path to linuxcnc repository: {path}\n\n"
-        usage  = 'Stand-alone options are:\n'
-        usage += '  -i          - Imperial mode, metric is the default\n'
-        usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
-        usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
-        print(error, usage)
-        sys.exit()
-    else:
-        sys.path.append(os.path.join(path, 'lib/python'))
-
-import conv_settings as CONVSET
-import conv_line as CONVLIN
-import conv_circle as CONVCIR
-import conv_ellipse as CONVELL
-import conv_triangle as CONVTRI
-import conv_rectangle as CONVREC
-import conv_polygon as CONVPOL
-import conv_bolt as CONVBOL
-import conv_slot as CONVSLO
-import conv_star as CONVSTA
-import conv_gusset as CONVGUS
-import conv_sector as CONVSEC
-import conv_block as CONVBLO
+import time
 
 APPDIR = os.path.dirname(os.path.realpath(__file__))
 TMPPATH = '/tmp/plasmactk'
@@ -62,8 +33,10 @@ class Conversational():
         self.materials = materials
         self.matIndex = matNum
         self.standalone = standalone
-        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files')
+#        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files')
+        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
         self.existingFile = None
+        self.mytags = ['mytags']
 #        print(f"self.unitsPerMm:{self.unitsPerMm}   self.standalone={self.standalone}")
 #        self.materials = materialFileDict
 #        self.matIndex = matIndex
@@ -138,13 +111,19 @@ class Conversational():
             entry.bind('<KP_Enter>', self.preview, add='+')
         for entry in self.buttons: entry.bind('<space>', self.button_key_pressed)
         self.entry_validation()
+        self.canon = Canon()
+        parameter = os.path.join(TMPPATH, 'parameters')
+        self.canon.parameter_file = parameter
+#        print(f"self.canon.line={self.canon.line}")
         self.convFirstRun = False
 
 #    def start(self, materialFileDict, matIndex, existingFile, g5xIndex):
-    def start(self):#, metric, materialFileDict, matIndex):
+    def start(self):
         self.buttonOnColor = self.spButton.cget('hover_color')
         self.buttonOffColor = self.spButton.cget('fg_color')
-        print(f"button colors:   {self.buttonOnColor}   {self.buttonOffColor}")
+#        print(dir(self.parent.convPreview))
+#        self.bgColor = self.parent.convPreview.cget('bg_color')
+#        print(self.bgColor)
         self.g5xIndex = 1 # do we need this without a real preview ???
 
 #        self.metric = metric
@@ -216,7 +195,10 @@ class Conversational():
             self.plot(file.name)
 
     def plot(self, filename, title=True):
-#        print('PLOT', filename)
+        if len(self.parent.convPreview.winfo_children()) > 1:
+            self.canvas.destroy()
+        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor[1])#, highlightthickness=0)
+        self.canvas.grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
         # if we are in stand-alone mode we need to make a
         # temp file because we cannot use named parameters
         if self.standalone:
@@ -224,8 +206,7 @@ class Conversational():
             with open(filename, 'r') as inFile:
                 with open(file, 'w') as outFile:
                     for line in inFile:
-                        if len(line.strip()) and line.strip()[0].upper() == 'F':
-                            line = 'F1\n'
+                        line = line.replace('#<_hal[plasmac.cut-feed-rate]>', '1')
                         line = line.replace('#<_ini[axis_z]max_limit>', '1')
                         outFile.write(line)
             name = f"{os.path.basename(file)} from {os.path.basename(filename)}"
@@ -234,81 +215,78 @@ class Conversational():
             name = os.path.basename(filename)
         if not title:
             name = ''
-#        print('PARSE', filename)
-        #clear existing plot
-        self.ax.clear()
         # parse the gcode file
         unitcode = 'G21 G49'
         initcode = 'G21 G40 G49 G80 G90 G92.1 G94 G97 M52P1'
-        self.canon = Canon()
-        parameter = os.path.join(TMPPATH, 'parameters')
-        self.canon.parameter_file = parameter
+        self.canon.__init__()
         result, seq = gcode.parse(file, self.canon, unitcode, initcode)
         if result > gcode.MIN_ERROR:
-            self.ax.set_title(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
-            plt.show()
-            self.canvas.draw()
+            print(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
             return
-        # iterate through the points
+        print(f"\nPLOT {filename}")
+        count = 0
         for point in self.canon.points:
-            shape = None
-            linestyle = ':' if point['shape'] == 'rapid' else '-'
-            color = '#c0c0c0'
+            pass
+        #     shape = None
+        #     linestyle = ':' if point['shape'] == 'rapid' else '-'
+        #     color = '#c0c0c0'
             if point['shape'] == 'arc': # arcs
-                shape = patches.Arc((point['centerX'],
-                                     point['centerY']),
-                                     width=point['radius'] * 2,
-                                     height=point['radius'] * 2,
-                                     theta1=point['startAngle'],
-                                     theta2=point['endAngle'],
-                                     edgecolor=color,
-                                     facecolor='none',
-                                     lw=1,
-                                     linestyle=linestyle)
+                count += 1
+                self.canvas.create_arc(point['x1'],
+                                       point['y1'],
+                                       point['x2'],
+                                       point['y2'],
+                                       start=point['startAngle'],
+                                       extent=point['extent'],
+                                       width=1,
+                                       outline='gray90',
+                                       style='arc')
+#                if (point['extent'] > 190 and point['extent'] < 359) or (point['extent'] < -190 and point['extent'] > -359):
+#                if (point['extent'] > 190) or (point['extent'] < -190):
+#                    print(f"BAD {count}: self.canvas.create_arc({point['x1']:.2f}, {point['y1']:.2f}, {point['x2']:.2f}, {point['y2']:.2f}, start={point['startAngle']:.2f}, extent={point['extent']:.2f}, style='arc', width=1, outline='cyan')")
             elif point['shape'] == 'line': # lines
-                closed = True if point['points'][0] == point['points'][-1] else False
-                shape = patches.Polygon(point['points'],
-                                        closed=closed,
-                                        edgecolor=color,
-                                        facecolor='none',
-                                        lw=1,
-                                        linestyle=linestyle)
-            elif point['shape'] == 'rapid' and self.showRapids: # rapids
-                if math.sqrt((point['points'][1][0] - point['points'][0][0]) ** 2 + (point['points'][1][1] - point['points'][0][1]) ** 2) > self.rapidArrowLen * 2:
-                    closed = True if point['points'][0] == point['points'][-1] else False
-                    centerX = (point['points'][0][0] + point['points'][1][0]) / 2
-                    centerY = (point['points'][0][1] + point['points'][1][1]) / 2
-                    angle = math.atan2(point['points'][1][1] - centerY, point['points'][1][0] - centerX)
-                    startX = centerX - self.rapidArrowLen / 2 * math.cos(angle)
-                    startY = centerY - self.rapidArrowLen / 2 * math.sin(angle)
-                    endX = self.rapidArrowLen * math.cos(angle)
-                    endY = self.rapidArrowLen * math.sin(angle)
-                    arrow = patches.FancyArrow(startX, startY,
-                                            endX, endY,
-                                            head_width=3,
-                                            head_length=5,
-                                            edgecolor=color,
-                                            facecolor=color,
-                                            linestyle='-',
-                                            length_includes_head=True,
-                                            overhang=1)
-                    self.ax.add_patch(arrow)
-                closed = True if point['points'][0] == point['points'][-1] else False
-                shape = patches.Polygon(point['points'],
-                                        closed=closed,
-                                        edgecolor=color,
-                                        facecolor='none',
-                                        lw=1,
-                                        linestyle=linestyle)
-            # add the new shape
-            if shape:
-                self.ax.add_patch(shape)
-        # plot the shapes
-        self.ax.plot()
-        self.ax.set_title(name, color='#c0c0c0')
-        plt.show()
-        self.canvas.draw()
-        self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
+                self.canvas.create_line(point['points'],
+                                        fill='gray90')
+            elif point['shape'] == 'rapid' and self.showRapids:
+                self.canvas.create_line(point['points'],
+                                        fill='gray60')
+        self.parent.update()
+        if self.canon.points:# or 1:
+            canvasWidth = int(self.canvas.winfo_width())
+            canvasHeight = int(self.canvas.winfo_height())
+#            print(f"\ncanvas W:{canvasWidth}   H:{canvasHeight}")
+            x1, y1, x2, y2 = self.canvas.bbox('all')
+            viewWidth = x2 - x1
+            viewHeight = y2 - y1
+#            print(f"bbox org X1{x1}   Y1{y1}   X2{x2}   Y2{y2}   W:{viewWidth}   H:{viewHeight}")
+            xScale = round(canvasWidth / viewWidth, 2)
+            yScale = round(canvasHeight / viewHeight, 2)
+            scale = min(xScale, yScale) * 0.95
+#            print(f"scalex:{xScale:.4f}   scaley:{yScale:.4f}   scale  {scale:.4f}")
+            diffX = (canvasWidth - viewWidth) / 2
+            diffY = (canvasHeight - viewHeight) / 2
+#            print(f"diffx:{diffX}   diffY:{diffY}")
+            mX = -x1 + diffX
+            mY = (-y1 + diffY)# * scale
+#            print(f"moveX {mX}     moveY {mY}")
+            self.canvas.move('all', mX, mY)
+            self.scale_canvas(scale)
+
+    def scale_canvas(self, scale):
+        self.canvas.scale('all', 0, 0, scale, scale)
+        canvasWidth = int(self.canvas.winfo_width())
+        canvasHeight = int(self.canvas.winfo_height())
+        x1, y1, x2, y2 = self.canvas.bbox('all')
+        viewWidth = x2 - x1
+        viewHeight = y2 - y1
+#        print(f"bbox scaled X1{x1}   Y1{y1}   X2{x2}   Y2{y2}   W:{viewWidth}   H:{viewHeight}")
+        diffX = (canvasWidth - viewWidth) / 2
+        diffY = (canvasHeight - viewHeight) / 2
+#        print(f"diffx:{diffX}   diffY:{diffY}")
+        mX = -x1 + diffX
+        mY = (-y1 + diffY)
+#        print(f"moveX {mX}     moveY {mY}")
+        self.canvas.move('all', mX, mY)
 
     def entry_validation(self):
         self.vcmd = (self.parent.register(self.validate_entries))
@@ -731,7 +709,7 @@ class Conversational():
             self.previewActive = False
 
     def clear_widgets(self):
-        print('clear_widgets')
+#        print('clear_widgets')
         for child in self.parent.convInput.winfo_children():
             if not self.settingsExited and isinstance(child, tk.Entry):
                 if child.winfo_name() == str(getattr(self, 'liEntry')).rsplit('.',1)[1]:
@@ -1100,6 +1078,7 @@ class Conversational():
             s.destroy()
 # PLOTTER WIDGETS
         previewButtons = ctk.CTkFrame(self.parent.convPreview, fg_color='transparent', width=20)
+        self.bgColor = previewButtons.cget('bg_color')
         previewButtons.grid(row=0, column=0, padx=3, pady=3, sticky='nsew')
         previewButtons.grid_rowconfigure((0, 10), weight=1)
         zoomIn = ctk.CTkButton(master = previewButtons, text = '+', command = self.zoom_in, width=40, height=40, font=('', 24))
@@ -1116,32 +1095,6 @@ class Conversational():
         panUp.grid(row=8, column=0, padx=3, pady=3, sticky='ew')
         panDown = ctk.CTkButton(master = previewButtons, text = '\u2193', command = self.pan_down, width=40, height=40, font=('', 24))
         panDown.grid(row=9, column=0, padx=3, pady=3, sticky='ew')
-        # set style for matplot widgets
-        plt.style.use('dark_background')
-        # create the matplot toplevel
-        fig = plt.Figure(figsize=(1,1))
-        fig.set_facecolor(self.rgb_to_hex(33, 33, 33))
-        fig.subplots_adjust(bottom=0.06, left=0.08, top=0.95, right=0.99)
-        # add the subplot to the figure
-        self.ax = fig.add_subplot(111)
-        self.ax.set_facecolor(self.rgb_to_hex(33, 33, 33))
-        self.ax.axis('equal')
-        self.ax.margins(0.05)
-        self.ax.use_sticky_edges = False
-        self.ax.tick_params(colors=self.rgb_to_hex(233, 233, 233), which='both')
-        self.ax.spines['left'].set_color(self.rgb_to_hex(233, 233, 233))
-        self.ax.spines['left'].set_lw(1)
-        self.ax.spines['bottom'].set_color(self.rgb_to_hex(233, 233, 233))
-        self.ax.spines['bottom'].set_lw(1)
-        self.ax.spines['top'].set_lw(0)
-        self.ax.spines['right'].set_lw(0)
-        self.ax.set_title('No File', color='orange')
-        # embed the figure into tkinter
-        self.canvas = FigureCanvasTkAgg(fig, master=self.parent.convPreview)
-        self.canvas.get_tk_widget().grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
-        # render the figure
-        self.canvas.draw()
-        self.zoomLimits = (self.ax.get_xlim(), self.ax.get_ylim())
 
 class Canon:
     ''' use this class instead of glcanon as we are only interested in:
@@ -1155,6 +1108,8 @@ class Canon:
         self.angle = 0.0
         self.g5x_offset = ()
 
+        self.count = 0
+
     def __getattr__(self, attr):
 
         def set_units(f):
@@ -1164,7 +1119,8 @@ class Canon:
             return f
 
         def inner(*args):
-            ''' adds shapes to the points list '''
+            ''' adds shapes to the points list 
+                we negate the y axis coordinates to suit the silly tkinter canvas '''
             if attr not in ['arc_feed', 'straight_feed', 'straight_traverse', 'set_g5x_offset', 'set_xy_rotation']:
                 return
             # no need to scale angles
@@ -1190,39 +1146,54 @@ class Canon:
                 originX = self.offsetX
                 originY = self.offsetY
             # set start coordinates
-            startX = self.offsetX + ((originX - self.offsetX) * math.cos(self.angle) - (originY - self.offsetY) * math.sin(self.angle))
-            startY = self.offsetY + ((originX - self.offsetX) * math.sin(self.angle) + (originY - self.offsetY) * math.cos(self.angle))
+            startX = round(self.offsetX + ((originX - self.offsetX) * math.cos(self.angle) - (originY - self.offsetY) * math.sin(self.angle)), 4)
+            startY = round(self.offsetY + ((originX - self.offsetX) * math.sin(self.angle) + (originY - self.offsetY) * math.cos(self.angle)), 4)
             # set end coordinates
-            endX = self.offsetX + (args[0] * math.cos(self.angle) - args[1] * math.sin(self.angle))
-            endY = self.offsetY + (args[0] * math.sin(self.angle) + args[1] * math.cos(self.angle))
+            endX = round(self.offsetX + (args[0] * math.cos(self.angle) - args[1] * math.sin(self.angle)), 4)
+            endY = round(self.offsetY + (args[0] * math.sin(self.angle) + args[1] * math.cos(self.angle)), 4)
             if attr == 'arc_feed': # arcs
+
+                self.count += 1
+
                 # set arc parameters
                 if len(self.points): # if start point exists
                     # set arc center coordinates
-                    centerX = self.offsetX + (args[2] * math.cos(self.angle) - args[3] * math.sin(self.angle))
-                    centerY = self.offsetY + (args[2] * math.sin(self.angle) + args[3] * math.cos(self.angle))
+                    centerX = round(self.offsetX + (args[2] * math.cos(self.angle) - args[3] * math.sin(self.angle)), 4)
+                    centerY = round(self.offsetY + (args[2] * math.sin(self.angle) + args[3] * math.cos(self.angle)), 4)
                     # set arc radius
                     radius = round(math.sqrt((centerX - endX)**2 + (centerY - endY)**2), 4)
-                    if args[4] > 0: # cw arc 
-                        dir = args[4] * 1
-                        startAngle = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
-                        endAngle = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
-                    else:  # ccw arc
-                        dir = args[4] * -1
-                        startAngle = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
-                        endAngle = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
-                    # circles need to be 360 deg, not 0 deg
-                    if endX == startX and endY == startY:
-                        endAngle += 360
+                    dir = 1
+                    start = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
+                    end = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
+#                    print(f"1:   s:{start} e:{end} d:{dir} a:{args[4]}   sx:{startX} cx:{centerX} ex:{endX}   sy:{startY} cy:{centerY} ey:{endY}   r:{radius}")
+                    startAngle = round(start, 4)
+                    endAngle = round(end, 4)
+                    # we can use an arc to simulate a circle but it cannot be a full 360 degrees
+                    extent = endAngle - startAngle if endAngle - startAngle != 0 else 359.99
+# FIXME - a wacky and incorrect way to prevent arc being drawn in the reverse direction
+#                    if (extent > 190 and extent < 359) or (extent < -190 and extent > -359):
+                    if (extent > 190) or (extent < -190):
+#                        print(f" BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
+                        if extent < 0:
+                            extent = 360 - extent * -1
+                        else:
+                            startAngle = endAngle
+                            extent = 360 - extent
+                        #print(f"      new extent: {extent}")
+#                        if (extent > 180) or (extent < -180):
+#                            print(f" BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
+                    x1 = centerX - radius
+                    y1 = (centerY - radius) * -1
+                    x2 = centerX + radius
+                    y2 = (centerY + radius) * -1
                     # add new arc to points list
                     self.points.append({'shape': 'arc',
-                                        'endX': endX,
-                                        'endY': endY,
-                                        'centerX': centerX,
-                                        'centerY': centerY,
-                                        'radius': radius,
+                                        'x1': x1,
+                                        'y1': y1,
+                                        'x2': x2,
+                                        'y2': y2,
                                         'startAngle': startAngle,
-                                        'endAngle': endAngle,
+                                        'extent': extent,
                                         'lastX': args[0],
                                         'lastY': args[1]})
                 # arcs cannot start from nowhere
@@ -1232,7 +1203,7 @@ class Canon:
                 shape = 'line' if attr == 'straight_feed' else 'rapid'
                 # add point to last line/rapid in  points list
                 if len(self.points) and self.points[-1]['shape'] == shape:
-                    self.points[-1]['points'].append((endX, endY))
+                    self.points[-1]['points'].append((endX, -endY))
                     self.points[-1]['lastX'] = args[0]
                     self.points[-1]['lastY'] = args[1]
                     # delete extra rapid points if required
@@ -1240,16 +1211,15 @@ class Canon:
                         if self.points[-1]['points'][1] == self.points[-1]['points'][2]:
                             del self.points[-1]['points'][2]
                         elif self.points[-1]['shape'] == 'rapid' and len(self.points[-1]['points']) > 2:
-                                if (self.points[-1]['points'][0][0], self.points[-1]['points'][0][1]) == self.g5x_offset:
+                                if (-self.points[-1]['points'][0][0], self.points[-1]['points'][0][1]) == self.g5x_offset:
                                     del self.points[-1]['points'][1]
                                 else:
                                     del self.points[-1]['points'][0]
                 # create new line/rapid in points list
                 self.points.append({'shape': shape,
-                                        'points': [(startX, startY), (endX, endY)],
+                                        'points': [(startX, -startY), (endX, -endY)],
                                         'lastX': args[0],
                                         'lastY': args[1]})
-
         return inner
 
     def next_line(self, linecode):
@@ -1272,7 +1242,10 @@ class Canon:
     def get_tool(self, pocket):
         return -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
 
-''' The following allows conversational to run in standalone mode
+
+''' ##############################################################################################
+
+    The following allows conversational to run in standalone mode
     If LinuxCNC is run in place it requires:
         a path to the root of the repository
         a path to a material file, if not specified then a single basic material will be allocated
@@ -1280,6 +1253,7 @@ class Canon:
         -i          - Imperial mode, metric is the default
         -l "path"   - Path to root of rip repository eg ~/linuxcnc-dev
         -m "path"   - Path to a material file
+
 '''
 
 class Window(ctk.CTk):
@@ -1299,6 +1273,16 @@ class Window(ctk.CTk):
         self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
         self.convPreview.grid_rowconfigure(0, weight=1)
         self.convPreview.grid_columnconfigure(1, weight=1)
+        # self.canvasFrame = ctk.CTkFrame(self.convPreview)
+        # self.canvasFrame.grid(row=0, column=1, sticky='nsew')
+        # self.update()
+        # print(f"self          W:{self.winfo_width()}   H:{self.winfo_height()}")
+        # print(f"convTools     W:{self.convTools.winfo_width()}   H:{self.convTools.winfo_height()}")
+        # print(f"convInput     W:{self.convInput.winfo_width()}   H:{self.convInput.winfo_height()}")
+        # print(f"convPreview   W:{self.convPreview.winfo_width()}   H:{self.convPreview.winfo_height()}")
+        # print(f"canvasFrame   W:{self.canvasFrame.winfo_width()}   H:{self.canvasFrame.winfo_height()}")
+
+
         self.comp = {'development': False}
         matDict = {}
         if materials:
@@ -1327,21 +1311,47 @@ class Window(ctk.CTk):
         conv.start()
 
 if __name__ == '__main__':
-    args = sys.argv[1:]
+    error = ''
     metric = True
     materials = None
-    if '-i' in args:
-        metric = False
-    if '-m' in args:
-        materials = args[args.index('-m') + 1] if '-l' != args[-1] else ''
-        if not os.path.isfile(materials):
-            error  = f"\nError: invalid path to materials file: {materials}\n\n"
-            usage  = 'Stand-alone options are:\n'
-            usage += '  -i          - Imperial mode, metric is the default\n'
-            usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
-            usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
-            print(error, usage)
-            sys.exit()
+    args = sys.argv[1:]
+    if len(args):
+        if '-i' in args:
+            metric = False
+        if '-m' in args:
+            file = args[args.index('-m') + 1] if '-l' != args[-1] else ''
+            if os.path.isfile(file):
+                materials = file
+            else:
+                error += f"invalid materials file:      {file}\n"
+        if '-l' in args:
+            path = args[args.index('-l') + 1] if '-l' != args[-1] else ''
+            if os.path.isdir(path):
+                sys.path.append(os.path.join(path, 'lib/python'))
+            else:
+                error += f"invalid linuxcnc repository: {path}\n"
+    else: # this is temp to allow easy run from ctrl-r within vscode
+        materials = os.path.expanduser('~/linuxcnc/configs/0_qtplasmac_metric/metric_material.cfg')
+        sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
+    if error:
+        usage  = 'Stand-alone options are:\n'
+        usage += '  -i          - Imperial mode, metric is the default\n'
+        usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
+        usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
+        print(f"\nError:\n{error}\n{usage}")
+        sys.exit()
+    import conv_settings as CONVSET
+    import conv_line as CONVLIN
+    import conv_circle as CONVCIR
+    import conv_ellipse as CONVELL
+    import conv_triangle as CONVTRI
+    import conv_rectangle as CONVREC
+    import conv_polygon as CONVPOL
+    import conv_bolt as CONVBOL
+    import conv_slot as CONVSLO
+    import conv_star as CONVSTA
+    import conv_gusset as CONVGUS
+    import conv_sector as CONVSEC
+    import conv_block as CONVBLO
     app = Window(metric, materials)
     app.mainloop()
-
