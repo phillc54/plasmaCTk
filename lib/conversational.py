@@ -7,7 +7,6 @@ import math
 import customtkinter as ctk
 from customtkinter import filedialog
 from CTkMessagebox import CTkMessagebox
-import tkinter as tk
 from shutil import copy
 from importlib import reload
 from PIL import Image
@@ -26,7 +25,7 @@ class Conversational():
         print('conversational is initialized')
         self.parent = parent
         self.convFirstRun = True
-        self.rE = parent.tk.eval
+        self.rE = parent.eval
 
         self.unitsPerMm = unitsPerMm
 
@@ -83,6 +82,8 @@ class Conversational():
         self.showRapids = False
         self.rapidArrowLen = 5
         self.zoomLimits = ()
+        self.canvasDefault = {}
+        self.canvasScale = 1
         if not self.convFirstRun and self.parent.comp['development']:
             reload(CONVSET)
         else:
@@ -197,8 +198,15 @@ class Conversational():
     def plot(self, filename, title=True):
         if len(self.parent.convPreview.winfo_children()) > 1:
             self.canvas.destroy()
-        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor[1])#, highlightthickness=0)
+        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor[1], highlightthickness=0)
         self.canvas.grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
+        self.canvas.bind('<Double-Button-1>', self.on_mouse_left_double)
+        self.canvas.bind('<ButtonPress-1>', self.on_mouse_left_press)
+        self.canvas.bind('<B1-Motion>', self.on_mouse_drag)
+        self.canvas.bind('<MouseWheel>', self.on_mousewheel)
+        self.canvas.bind('<Button-4>', self.on_mousewheel)
+        self.canvas.bind('<Button-5>', self.on_mousewheel)
+        self.mouseX, self.mouseY = 0, 0
         # if we are in stand-alone mode we need to make a
         # temp file because we cannot use named parameters
         if self.standalone:
@@ -223,13 +231,12 @@ class Conversational():
         if result > gcode.MIN_ERROR:
             print(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
             return
-        print(f"\nPLOT {filename}")
+#        print(f"\nPLOT {filename}")
         count = 0
+        # origin marker
+        self.canvas.create_line((0, 0), (10, 0), width=1, fill='green', tags=('origin'))
+        self.canvas.create_line((0, 0), (0, -10), width=1, fill='red', tags=('origin'))
         for point in self.canon.points:
-            pass
-        #     shape = None
-        #     linestyle = ':' if point['shape'] == 'rapid' else '-'
-        #     color = '#c0c0c0'
             if point['shape'] == 'arc': # arcs
                 count += 1
                 self.canvas.create_arc(point['x1'],
@@ -240,53 +247,101 @@ class Conversational():
                                        extent=point['extent'],
                                        width=1,
                                        outline='gray90',
-                                       style='arc')
+                                       style='arc',
+                                       tags=('shape'))
 #                if (point['extent'] > 190 and point['extent'] < 359) or (point['extent'] < -190 and point['extent'] > -359):
 #                if (point['extent'] > 190) or (point['extent'] < -190):
 #                    print(f"BAD {count}: self.canvas.create_arc({point['x1']:.2f}, {point['y1']:.2f}, {point['x2']:.2f}, {point['y2']:.2f}, start={point['startAngle']:.2f}, extent={point['extent']:.2f}, style='arc', width=1, outline='cyan')")
             elif point['shape'] == 'line': # lines
-                self.canvas.create_line(point['points'],
-                                        fill='gray90')
-            elif point['shape'] == 'rapid' and self.showRapids:
-                self.canvas.create_line(point['points'],
-                                        fill='gray60')
+                self.canvas.create_line(point['points'], width=1, fill='gray90',tags=('shape'))
+            elif point['shape'] == 'rapid' and self.showRapids: # rapids
+                self.canvas.create_line(point['points'], width=1, fill='gray60',tags=('shape'))
         self.parent.update()
         if self.canon.points:# or 1:
-            canvasWidth = int(self.canvas.winfo_width())
-            canvasHeight = int(self.canvas.winfo_height())
-#            print(f"\ncanvas W:{canvasWidth}   H:{canvasHeight}")
-            x1, y1, x2, y2 = self.canvas.bbox('all')
-            viewWidth = x2 - x1
-            viewHeight = y2 - y1
-#            print(f"bbox org X1{x1}   Y1{y1}   X2{x2}   Y2{y2}   W:{viewWidth}   H:{viewHeight}")
-            xScale = round(canvasWidth / viewWidth, 2)
-            yScale = round(canvasHeight / viewHeight, 2)
-            scale = min(xScale, yScale) * 0.95
-#            print(f"scalex:{xScale:.4f}   scaley:{yScale:.4f}   scale  {scale:.4f}")
-            diffX = (canvasWidth - viewWidth) / 2
-            diffY = (canvasHeight - viewHeight) / 2
-#            print(f"diffx:{diffX}   diffY:{diffY}")
-            mX = -x1 + diffX
-            mY = (-y1 + diffY)# * scale
-#            print(f"moveX {mX}     moveY {mY}")
-            self.canvas.move('all', mX, mY)
+            # get scale required for zoom all
+            view, viewC, shape, shapeC, origin = self.get_canvas()
+#            print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
+            xScale = (view[0] * 0.96) / shape[0]
+            yScale = (view[1] * 0.96) / shape[1]
+            scale = min(xScale, yScale)# * 0.95
+#            print(f"scales:({xScale:.4f}x{yScale:.4f})   scale:{scale:.4f}")
             self.scale_canvas(scale)
+            self.canvasScale = 1
 
     def scale_canvas(self, scale):
+        self.canvasScale *= scale
+#        print(f"scale_canvas:{scale:.4f}   total:{self.canvasScale}")
         self.canvas.scale('all', 0, 0, scale, scale)
-        canvasWidth = int(self.canvas.winfo_width())
-        canvasHeight = int(self.canvas.winfo_height())
+        view, viewC, shape, shapeC, origin = self.get_canvas()
+#        print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
+        diffX = (view[0] - shape[0]) / 2
+        diffY = (view[1] - shape[1]) / 2
+#        print(f"diff:{diffX}x{diffY}")
+        moveX = -origin[0] + diffX
+        moveY = -origin[1] + diffY
+#        print(f"move:{moveX}x{moveY}")
+        self.canvas.move('all', moveX, moveY)
+
+    def get_canvas(self):
+#        print('get_canvas')
+        cWidth = self.canvas.winfo_width()
+        cHeight = self.canvas.winfo_height()
+        cCenter = (cWidth / 2, cHeight / 2)
         x1, y1, x2, y2 = self.canvas.bbox('all')
-        viewWidth = x2 - x1
-        viewHeight = y2 - y1
-#        print(f"bbox scaled X1{x1}   Y1{y1}   X2{x2}   Y2{y2}   W:{viewWidth}   H:{viewHeight}")
-        diffX = (canvasWidth - viewWidth) / 2
-        diffY = (canvasHeight - viewHeight) / 2
-#        print(f"diffx:{diffX}   diffY:{diffY}")
-        mX = -x1 + diffX
-        mY = (-y1 + diffY)
-#        print(f"moveX {mX}     moveY {mY}")
-        self.canvas.move('all', mX, mY)
+        vWidth = x2 - x1
+        vHeight = y2 - y1
+        vCenter = (vWidth / 2, vHeight / 2)
+#        print(f"canvas:{cWidth}x{cHeight} {cCenter}   view:{vWidth}x{vHeight} {vCenter}   ({x1},{y1})")
+        return (cWidth, cHeight), cCenter, (vWidth, vHeight), vCenter, (x1, y1)
+
+    def pan_left(self):
+        self.canvas.move('all', self.canvas.winfo_width() * -0.25, 0)
+
+    def pan_right(self):
+        self.canvas.move('all', self.canvas.winfo_width() * 0.25, 0)
+
+    def pan_up(self):
+        self.canvas.move('all', 0, self.canvas.winfo_height() * -0.25)
+
+    def pan_down(self):
+        self.canvas.move('all', 0, self.canvas.winfo_height() * 0.25)
+
+    def zoom_in(self):
+        self.scale_canvas(2)
+
+    def zoom_out(self):
+        self.scale_canvas(0.5)
+
+    def zoom_all(self):
+        self.scale_canvas(1 / self.canvasScale)
+
+    def on_mouse_left_double(self, event):
+        self.scale_canvas(1 / self.canvasScale)
+
+    def on_mouse_left_press(self, event):
+#        self.canvas.scan_mark(event.x, event.y)
+        self.mouseX, self.mouseY = event.x, event.y
+
+    def on_mouse_drag(self, event):
+#        self.canvas.scan_dragto(event.x, event.y, gain=1)
+        if event.x < self.mouseX:
+            self.canvas.move('all', -10, 0)
+        elif event.x > self.mouseX:
+            self.canvas.move('all', 10, 0)
+        if event.y < self.mouseY:
+            self.canvas.move('all', 0, -10)
+        elif event.y > self.mouseY:
+            self.canvas.move('all', 0, 10)
+        self.mouseX, self.mouseY = event.x, event.y
+
+    def on_mousewheel(self, event):
+        if event.num == 5 or event.delta < 0:
+            scale = 1 / 1.1
+        elif event.num == 4 or event.delta > 0:
+            scale = 1.1
+        else:
+            scale = 1
+        self.scale_canvas(scale)
 
     def entry_validation(self):
         self.vcmd = (self.parent.register(self.validate_entries))
@@ -711,7 +766,7 @@ class Conversational():
     def clear_widgets(self):
 #        print('clear_widgets')
         for child in self.parent.convInput.winfo_children():
-            if not self.settingsExited and isinstance(child, tk.Entry):
+            if not self.settingsExited and isinstance(child, ctk.CTkEntry):
                 if child.winfo_name() == str(getattr(self, 'liEntry')).rsplit('.',1)[1]:
                     pass
                 elif child.winfo_name() == str(getattr(self, 'loEntry')).rsplit('.',1)[1]:
@@ -761,80 +816,6 @@ class Conversational():
     def material_changed(self, material):
         self.module.auto_preview(self)
 
-    def pan_left(self):
-        xMin,xMax = self.ax.get_xlim()
-        pan = (xMax - xMin) /10
-        self.ax.set_xlim(xMin - pan, xMax - pan)
-        self.canvas.draw()
-
-    def pan_right(self):
-        xMin,xMax = self.ax.get_xlim()
-        pan = (xMax - xMin) /10
-        self.ax.set_xlim(xMin + pan, xMax + pan)
-        self.canvas.draw()
-
-    def pan_up(self):
-        yMin,yMax = self.ax.get_ylim()
-        pan = (yMax - yMin) / 10
-        self.ax.set_ylim(yMin + pan, yMax + pan)
-        self.canvas.draw()
-
-    def pan_down(self):
-        yMin,yMax = self.ax.get_ylim()
-        pan = (yMax - yMin) / 10
-        self.ax.set_ylim(yMin - pan, yMax - pan)
-        self.canvas.draw()
-
-    def zoom_in(self):
-        x = (self.zoomLimits[0][1] - self.zoomLimits[0][0]) / 10
-        y = (self.zoomLimits[1][1] - self.zoomLimits[1][0]) / 10
-        xMin = self.ax.get_xlim()[0] + x
-        xMax = self.ax.get_xlim()[1] - x
-        yMin = self.ax.get_ylim()[0] + y
-        yMax = self.ax.get_ylim()[1] - y
-        if xMin > xMax or yMin > yMax:
-# FIXME - delete when scaling done
-#                print(f"\nLIMIT   X({self.ax.get_xlim()[0]:7.2f}, {self.ax.get_xlim()[1]:7.2f})   Y({self.ax.get_ylim()[0]:7.2f}, {self.ax.get_ylim()[1]:7.2f})")
-#                print(f"\n  BAD   X({xMin:7.2f}, {xMax:7.2f})   Y({yMin:7.2f}, {yMax:7.2f})")
-            x = self.ax.get_xlim()[1] - self.ax.get_xlim()[0]
-            y = self.ax.get_ylim()[1] - self.ax.get_ylim()[0]
-# FIXME - delete when scaling done
-#                print(f"X:{x}   Y:{y}")
-            if x < 100 or y < 100:
-                return
-            xMid = self.ax.get_xlim()[0] + (x / 2)
-            yMid = self.ax.get_ylim()[0] + (y / 2)
-# FIXME - delete when scaling done
-#                print(f"xMid:{xMid}   yMid:{yMid}")
-#FIXME - this needs scaling
-            if x > y:
-                xLen = 50 * (x / y)
-                yLen = 50
-            else:
-                xLen = 50 * (y / x)
-                yLen = 50
-            xMin = xMid - xLen
-            xMax = xMid + xLen
-            yMin = yMid - yLen
-            yMax = yMid + yLen
-# FIXME - delete when scaling done
-#                print(f"xMin:{xMin}   xMax:{xMax}   yMin:{yMin}   yMax:{yMax}")
-        self.ax.set_xlim(xMin, xMax)
-        self.ax.set_ylim(yMin, yMax)
-        self.canvas.draw()
-
-    def zoom_out(self):
-        x = (self.zoomLimits[0][1] - self.zoomLimits[0][0]) / 10
-        y = (self.zoomLimits[1][1] - self.zoomLimits[1][0]) / 10
-        self.ax.set_xlim(self.ax.get_xlim()[0] - x, self.ax.get_xlim()[1] + x)
-        self.ax.set_ylim(self.ax.get_ylim()[0] - y, self.ax.get_ylim()[1] + y)
-        self.canvas.draw()
-
-    def zoom_all(self):
-        self.ax.set_xlim(self.zoomLimits[0])
-        self.ax.set_ylim(self.zoomLimits[1])
-        self.canvas.draw()
-
     def show_common_widgets(self):
         self.spacer.grid(column=0, row=11, sticky='ns')
         self.previewC.grid(column=0, row=12, padx=3, pady=3)
@@ -877,117 +858,117 @@ class Conversational():
         self.ctLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('CUT TYPE'))
         self.ctButton = ctk.CTkButton(self.parent.convInput, width=width)
         self.xsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('X ORIGIN'))
-        self.xsValue = tk.StringVar(value='0')
+        self.xsValue = ctk.StringVar(value='0')
         self.xsEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.xsValue)
         self.ysLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Y ORIGIN'))
-        self.ysValue = tk.StringVar(value='0')
+        self.ysValue = ctk.StringVar(value='0')
         self.ysEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.ysValue)
         self.liLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LEAD IN'))
-        self.liValue = tk.StringVar()
+        self.liValue = ctk.StringVar()
         self.liEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.liValue)
         self.loLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LEAD OUT'))
-        self.loValue = tk.StringVar()
+        self.loValue = ctk.StringVar()
         self.loEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.loValue)
         self.polyLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('TYPE'))
         self.polyCombo = ctk.CTkComboBox(self.parent.convInput, justify='left', border_width=1)
         self.sLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SIDES'))
-        self.sValue = tk.StringVar()
+        self.sValue = ctk.StringVar()
         self.sEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.sValue)
         self.dLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('DIAMETER'))
-        self.dValue = tk.StringVar()
+        self.dValue = ctk.StringVar()
         self.dEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.dValue)
         self.lLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LENGTH'))
-        self.lValue = tk.StringVar()
+        self.lValue = ctk.StringVar()
         self.lEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.lValue)
         self.wLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('WIDTH'))
-        self.wValue = tk.StringVar()
+        self.wValue = ctk.StringVar()
         self.wEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.wValue)
         self.hLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('HEIGHT'))
-        self.hValue = tk.StringVar()
+        self.hValue = ctk.StringVar()
         self.aaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('A ANGLE'))
-        self.aaValue = tk.StringVar()
+        self.aaValue = ctk.StringVar()
         self.aaEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.aaValue)
         self.alLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('a LENGTH'))
-        self.alValue = tk.StringVar()
+        self.alValue = ctk.StringVar()
         self.alEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.alValue)
         self.baLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('B ANGLE'))
-        self.baValue = tk.StringVar()
+        self.baValue = ctk.StringVar()
         self.baEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.baValue)
         self.blLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('b LENGTH'))
-        self.blValue = tk.StringVar()
+        self.blValue = ctk.StringVar()
         self.blEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.blValue)
         self.caLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('C ANGLE'))
-        self.caValue = tk.StringVar()
+        self.caValue = ctk.StringVar()
         self.caEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.caValue)
         self.clLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('c LENGTH'))
-        self.clValue = tk.StringVar()
+        self.clValue = ctk.StringVar()
         self.clEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.clValue)
         self.hEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hValue)
         self.hdLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('HOLE DIA'))
-        self.hdValue = tk.StringVar()
+        self.hdValue = ctk.StringVar()
         self.hdEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hdValue)
         self.hoLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('# HOLES'))
-        self.hoValue = tk.StringVar()
+        self.hoValue = ctk.StringVar()
         self.hoEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hoValue)
         self.bcaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('CIRCLE ANG'))
-        self.bcaValue = tk.StringVar()
+        self.bcaValue = ctk.StringVar()
         self.bcaEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.bcaValue)
         self.ocLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OVERCUT'))
-        self.ocValue = tk.StringVar()
+        self.ocValue = ctk.StringVar()
         self.ocEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.ocValue)
         self.ocButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('OFF'))
         self.pLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('POINTS'))
-        self.pValue = tk.StringVar()
+        self.pValue = ctk.StringVar()
         self.pEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.pValue)
         self.odLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OUTER DIA'))
-        self.odValue = tk.StringVar()
+        self.odValue = ctk.StringVar()
         self.odEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.odValue)
         self.idLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('INNER DIA'))
-        self.idValue = tk.StringVar()
+        self.idValue = ctk.StringVar()
         self.idEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.idValue)
         self.rLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('RADIUS'))
         self.rButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('RADIUS'))
-        self.rValue = tk.StringVar()
+        self.rValue = ctk.StringVar()
         self.rEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rValue)
         self.saLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SEC ANGLE'))
-        self.saValue = tk.StringVar(value='0')
+        self.saValue = ctk.StringVar(value='0')
         self.saEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.saValue)
         self.aLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ANGLE'))
-        self.aValue = tk.StringVar(value='0')
+        self.aValue = ctk.StringVar(value='0')
         self.aEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.aValue)
         self.r1Button = ctk.CTkButton(self.parent.convInput, width=width)
-        self.r1Value = tk.StringVar()
+        self.r1Value = ctk.StringVar()
         self.r1Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.r1Value)
         self.r2Button = ctk.CTkButton(self.parent.convInput, width=width)
-        self.r2Value = tk.StringVar()
+        self.r2Value = ctk.StringVar()
         self.r2Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.r2Value)
         self.r3Button = ctk.CTkButton(self.parent.convInput, width=width)
-        self.r3Value = tk.StringVar()
+        self.r3Value = ctk.StringVar()
         self.r3Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.r3Value)
         self.r4Button = ctk.CTkButton(self.parent.convInput, width=width)
-        self.r4Value = tk.StringVar()
+        self.r4Value = ctk.StringVar()
         self.r4Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.r4Value)
         # block
         self.ccLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('COLUMNS'))
         self.cnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
-        self.cnValue = tk.StringVar(value='1')
+        self.cnValue = ctk.StringVar(value='1')
         self.cnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.cnValue)
         self.coLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
-        self.coValue = tk.StringVar(value='0')
+        self.coValue = ctk.StringVar(value='0')
         self.coEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.coValue)
         self.rrLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('ROWS'))
         self.rnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
-        self.rnValue = tk.StringVar(value='1')
+        self.rnValue = ctk.StringVar(value='1')
         self.rnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rnValue)
         self.roLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
-        self.roValue = tk.StringVar(value='0')
+        self.roValue = ctk.StringVar(value='0')
         self.roEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.roValue)
         self.bsLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('SHAPE'))
         self.scLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SCALE'))
-        self.scValue = tk.StringVar(value='1')
+        self.scValue = ctk.StringVar(value='1')
         self.scEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.scValue)
         self.rtLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ROTATION'))
-        self.rtValue = tk.StringVar(value='0')
+        self.rtValue = ctk.StringVar(value='0')
         self.rtEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rtValue)
         self.mirror = ctk.CTkButton(self.parent.convInput, width=width, text=_('MIRROR'))
         self.flip = ctk.CTkButton(self.parent.convInput, width=width, text=_('FLIP'))
@@ -996,36 +977,36 @@ class Conversational():
         self.lnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('TYPE'))
         self.lineCombo = ctk.CTkComboBox(self.parent.convInput, justify='left', border_width=1)
         self.l1Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l1Value = tk.StringVar()
+        self.l1Value = ctk.StringVar()
         self.l1Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l1Value)
         self.l2Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l2Value = tk.StringVar()
+        self.l2Value = ctk.StringVar()
         self.l2Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l2Value)
         self.l3Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l3Value = tk.StringVar()
+        self.l3Value = ctk.StringVar()
         self.l3Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l3Value)
         self.l4Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l4Value = tk.StringVar()
+        self.l4Value = ctk.StringVar()
         self.l4Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l4Value)
         self.l5Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l5Value = tk.StringVar()
+        self.l5Value = ctk.StringVar()
         self.l5Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l5Value)
         self.l6Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
-        self.l6Value = tk.StringVar()
+        self.l6Value = ctk.StringVar()
         self.l6Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l6Value)
         self.g23Arc = ctk.CTkButton(self.parent.convInput, width=width, text='CW - G2')
         # settings
         self.preLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('PREAMBLE'))
-        self.preValue = tk.StringVar()
+        self.preValue = ctk.StringVar()
         self.preEntry = ctk.CTkEntry(self.parent.convInput, width=width, border_width=1, textvariable=self.preValue)
         self.pstLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('POSTAMBLE'))
-        self.pstValue = tk.StringVar()
+        self.pstValue = ctk.StringVar()
         self.pstEntry = ctk.CTkEntry(self.parent.convInput, width=width, border_width=1, textvariable=self.pstValue)
         self.llLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('LEAD LENGTHS'))
         self.shLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('SMALL HOLES'))
-        self.shValue = tk.StringVar()
+        self.shValue = ctk.StringVar()
         self.shEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.shValue)
-        self.hsValue = tk.StringVar()
+        self.hsValue = ctk.StringVar()
         self.hsEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hsValue)
         self.hsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SPEED %'))
         self.pvLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('PREVIEW'))
@@ -1095,6 +1076,7 @@ class Conversational():
         panUp.grid(row=8, column=0, padx=3, pady=3, sticky='ew')
         panDown = ctk.CTkButton(master = previewButtons, text = '\u2193', command = self.pan_down, width=40, height=40, font=('', 24))
         panDown.grid(row=9, column=0, padx=3, pady=3, sticky='ew')
+
 
 class Canon:
     ''' use this class instead of glcanon as we are only interested in:
@@ -1273,6 +1255,7 @@ class Window(ctk.CTk):
         self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
         self.convPreview.grid_rowconfigure(0, weight=1)
         self.convPreview.grid_columnconfigure(1, weight=1)
+
         # self.canvasFrame = ctk.CTkFrame(self.convPreview)
         # self.canvasFrame.grid(row=0, column=1, sticky='nsew')
         # self.update()
@@ -1281,7 +1264,6 @@ class Window(ctk.CTk):
         # print(f"convInput     W:{self.convInput.winfo_width()}   H:{self.convInput.winfo_height()}")
         # print(f"convPreview   W:{self.convPreview.winfo_width()}   H:{self.convPreview.winfo_height()}")
         # print(f"canvasFrame   W:{self.canvasFrame.winfo_width()}   H:{self.canvasFrame.winfo_height()}")
-
 
         self.comp = {'development': False}
         matDict = {}
