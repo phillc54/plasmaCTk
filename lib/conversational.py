@@ -13,6 +13,55 @@ from PIL import Image
 
 import time
 
+# this ugly stuff is to allow running stand-alone
+# and/or running directly from vscode with ctrl-r
+if __name__ == '__main__':
+    error = ''
+    metric = True
+    materials = None
+    args = sys.argv[1:]
+    if len(args):
+        if '-i' in args:
+            metric = False
+        if '-m' in args:
+            file = args[args.index('-m') + 1] if '-l' != args[-1] else ''
+            if os.path.isfile(file):
+                materials = file
+            else:
+                error += f"invalid materials file:      {file}\n"
+        if '-l' in args:
+            path = args[args.index('-l') + 1] if '-l' != args[-1] else ''
+            if os.path.isdir(path):
+                sys.path.append(os.path.join(path, 'lib/python'))
+            else:
+                error += f"invalid linuxcnc repository: {path}\n"
+    else: # path required for vscode
+        sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
+    if error:
+        usage  = 'Stand-alone options are:\n'
+        usage += '  -i          - Imperial mode, metric is the default\n'
+        usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
+        usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
+        print(f"\nError:\n{error}\n{usage}")
+        sys.exit()
+
+if not sys.argv[1:]: # path required for vscode
+    sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
+
+import conv_settings as CONVSET
+import conv_line as CONVLIN
+import conv_circle as CONVCIR
+import conv_ellipse as CONVELL
+import conv_triangle as CONVTRI
+import conv_rectangle as CONVREC
+import conv_polygon as CONVPOL
+import conv_bolt as CONVBOL
+import conv_slot as CONVSLO
+import conv_star as CONVSTA
+import conv_gusset as CONVGUS
+import conv_sector as CONVSEC
+import conv_block as CONVBLO
+
 APPDIR = os.path.dirname(os.path.realpath(__file__))
 TMPPATH = '/tmp/plasmactk'
 IMGPATH = os.path.join(APPDIR, 'images')
@@ -20,41 +69,14 @@ if not os.path.isdir(TMPPATH):
     os.mkdir(TMPPATH)
 
 class Conversational():
-    def __init__(self, parent, unitsPerMm, materials, matNum, standalone=False):
+    def __init__(self, parent, standalone=False):
         super().__init__()
-        print('conversational is initialized')
-        self.parent = parent
         self.convFirstRun = True
-        self.rE = parent.eval
-
-        self.unitsPerMm = unitsPerMm
-
-        self.materials = materials
-        self.matIndex = matNum
+        self.parent = parent
         self.standalone = standalone
-#        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files')
-        self.initialdir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
         self.existingFile = None
-        self.mytags = ['mytags']
-#        print(f"self.unitsPerMm:{self.unitsPerMm}   self.standalone={self.standalone}")
-#        self.materials = materialFileDict
-#        self.matIndex = matIndex
-
-
-##        parent.convTools = toolFrame
-##        parent.convInput = convFrame
- #       self.unitsPerMm = 1#        self.unitsPerMm = unitsPerMm
-#        self.prefs = prefs
-#        self.getPrefs = getprefs
-#        self.putPrefs = putprefs
-##        self.comp = comp
-#        self.file_loader = file_loader
 #        self.wcs_rotation = wcs_rotation
-#        self.pVars = pVars
-#        self.conv_toggle = conv_toggle
-#        self.o = o
         self.shapeLen = {'x':None, 'y':None}
-#        self.combobox = combobox
         self.fTmp = os.path.join(TMPPATH, 'temp.ngc')
         self.fNgc = os.path.join(TMPPATH, 'shape.ngc')
         self.fNgcBkp = os.path.join(TMPPATH, 'backup.ngc')
@@ -68,7 +90,7 @@ class Conversational():
         self.oldModule = None
         self.convLine = {}
 #FIXME - different for standalone vs normal
-        if self.unitsPerMm == 1:
+        if self.parent.unitsPerMm == 1:
             smallHole = 32
             leadin = 5
             preAmble = 'G21\nG64P0.25'
@@ -84,6 +106,8 @@ class Conversational():
         self.zoomLimits = ()
         self.canvasDefault = {}
         self.canvasScale = 1
+        self.canvasSize = (1, 1)
+
         if not self.convFirstRun and self.parent.comp['development']:
             reload(CONVSET)
         else:
@@ -94,20 +118,17 @@ class Conversational():
             self.create_preview_widgets()
             self.show_common_widgets()
 #            color_change()
-        self.polyCombo.configure(values=[_('CIRCUMSCRIBED'), _('INSCRIBED'), _('SIDE LENGTH')])
-        self.lineCombo.configure(values=[_('LINE POINT ~ POINT'), _('LINE BY ANGLE'), _('ARC 3P'),\
-                               _('ARC 2P +RADIUS'), _('ARC ANGLE +RADIUS')])
+        self.polyCombo.configure(values=[_('Circumscribed'), _('Inscribed'), _('Side length')])
+        self.lineCombo.configure(values=[_('Line point to point'), _('Line by angle'), _('Arc 3 point'),\
+                                         _('Arc 2 point + radius'), _('Arc angle + radius')])
         self.addC.configure(command = self.add_shape_to_file)
-        self.loadC.configure(command = self.load_file)
         self.undoC.configure(command = self.undo_shape)
         self.newC.configure(command = lambda: self.new_pressed(True))
         self.saveC.configure(command = self.save_pressed)
         self.settingsC.configure(command = self.settings_pressed)
         self.sendC.configure(command = self.send_pressed)
         for entry in self.entries:
-            #entry.bind('<KeyRelease>', self.auto_preview) # plays havoc with good error detection
-            #entry.bind('<Return>', self.auto_preview, add='+')
-            #entry.bind('<KP_Enter>', self.auto_preview, add='+')
+            #entry.bind('<KeyRelease>', self.preview) # plays havoc with good error detection
             entry.bind('<Return>', self.preview, add='+')
             entry.bind('<KP_Enter>', self.preview, add='+')
         for entry in self.buttons: entry.bind('<space>', self.button_key_pressed)
@@ -115,55 +136,31 @@ class Conversational():
         self.canon = Canon()
         parameter = os.path.join(TMPPATH, 'parameters')
         self.canon.parameter_file = parameter
-#        print(f"self.canon.line={self.canon.line}")
-        self.convFirstRun = False
-
-#    def start(self, materialFileDict, matIndex, existingFile, g5xIndex):
-    def start(self):
         self.buttonOnColor = self.spButton.cget('hover_color')
         self.buttonOffColor = self.spButton.cget('fg_color')
-#        print(dir(self.parent.convPreview))
-#        self.bgColor = self.parent.convPreview.cget('bg_color')
-#        print(self.bgColor)
+        self.bgColor = self.parent.cget('background')
         self.g5xIndex = 1 # do we need this without a real preview ???
-
-#        self.metric = metric
-#        print(f"self.metric:{self.metric}   matIndex:{matIndex}   materialFileDict:{materialFileDict}")
-#        print(self.unitsPerMm)
-#        print(self.materials[1]['name'])
-#        print(self.matIndex)
-
-
-
-        # sDiff = 40 + int(self.pVars.fontSize.get()) - 7
-        # for i in range(len(self.convShapes)):
-        #     self.toolButton[i]['width'] = sDiff
-        #     self.toolButton[i]['height'] = sDiff
-        # self.materials = materialFileDict
-        # self.matIndex = matIndex
-#        self.existingFile = existingFile
-#        self.g5xIndex = g5xIndex
         self.previewActive = False
         self.settingsExited = False
         self.validShape = False
         self.invalidLeads = 0
         self.ocEntry.configure(state = 'disabled')
-        self.undoC.configure(text = _('RELOAD'))
+        self.undoC.configure(text = _('Reload'))
         self.addC.configure(state = 'disabled')
-        self.loadC.configure(state = 'normal')
         self.newC.configure(state = 'normal')
         self.saveC.configure(state = 'disabled')
-        self.sendC.configure(state = 'disabled')
+        if not self.standalone:
+            self.sendC.configure(state = 'disabled')
         self.settingsC.configure(state = 'normal')
         self.polyCombo.set(self.polyCombo.cget('values')[0])
         self.lineCombo.set(self.lineCombo.cget('values')[0])
         self.convLine = {}
         self.convBlock = [False, False]
         values = []
-        for m in self.materials:
-            values.append(f"{m}:{self.materials[m]['name']}")
+        for m in self.parent.materialFileDict:
+            values.append(f"{m}:{self.parent.materialFileDict[m]['name']}")
             self.matCombo.configure(values=values)
-        self.matCombo.set(values[self.matIndex])
+        self.matCombo.set(values[self.parent.matNum])
         self.convButton = self.oldConvButton
         self.shape_request(self.oldConvButton)
         # if self.existingFile:
@@ -173,8 +170,9 @@ class Conversational():
         # else:
         #     self.new_pressed(False)
         #     self.l3Entry.focus()
-        self.new_pressed(False)
-        self.l3Entry.focus()
+#        self.new_pressed(False)
+#        self.l3Entry.focus()
+        self.convFirstRun = False
 
     def rgb_to_hex(self, r, g, b):
         return f"#{r:02x}{g:02x}{b:02x}"
@@ -183,13 +181,11 @@ class Conversational():
         print(f"file_loader   file{file}   a:{a}   b:{b}")
         self.plot(file)
 
-    def load_file(self):
-        filetypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
-        file = None
-        file = filedialog.askopenfile(initialdir=self.initialdir, filetypes=filetypes)
+    def load_file(self, file=None):
+        if not file:
+            file = filedialog.askopenfile(initialdir=self.parent.initialDir, filetypes=self.parent.fileTypes)
         if file:
-            self.initialdir = os.path.dirname(file.name)
-
+            self.parent.initialDir = os.path.dirname(file.name)
             copy(file.name, self.fNgc)
             copy(file.name, self.fNgcBkp)
             self.existingFile = file.name
@@ -198,7 +194,7 @@ class Conversational():
     def plot(self, filename, title=True):
         if len(self.parent.convPreview.winfo_children()) > 1:
             self.canvas.destroy()
-        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor[1], highlightthickness=0)
+        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor, highlightthickness=0)
         self.canvas.grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
         self.canvas.bind('<Double-Button-1>', self.on_mouse_left_double)
         self.canvas.bind('<ButtonPress-1>', self.on_mouse_left_press)
@@ -206,6 +202,7 @@ class Conversational():
         self.canvas.bind('<MouseWheel>', self.on_mousewheel)
         self.canvas.bind('<Button-4>', self.on_mousewheel)
         self.canvas.bind('<Button-5>', self.on_mousewheel)
+        self.canvas.bind('<Configure>', self.resized)
         self.mouseX, self.mouseY = 0, 0
         # if we are in stand-alone mode we need to make a
         # temp file because we cannot use named parameters
@@ -234,6 +231,7 @@ class Conversational():
 #        print(f"\nPLOT {filename}")
         count = 0
         # origin marker
+#        self.canvas.create_text(-5, -5, text='0,0', fill='red', tags='origin')
         self.canvas.create_line((0, 0), (10, 0), width=1, fill='green', tags=('origin'))
         self.canvas.create_line((0, 0), (0, -10), width=1, fill='red', tags=('origin'))
         for point in self.canon.points:
@@ -257,42 +255,38 @@ class Conversational():
             elif point['shape'] == 'rapid' and self.showRapids: # rapids
                 self.canvas.create_line(point['points'], width=1, fill='gray60',tags=('shape'))
         self.parent.update()
-        if self.canon.points:# or 1:
-            # get scale required for zoom all
-            view, viewC, shape, shapeC, origin = self.get_canvas()
-#            print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
-            xScale = (view[0] * 0.96) / shape[0]
-            yScale = (view[1] * 0.96) / shape[1]
-            scale = min(xScale, yScale)# * 0.95
-#            print(f"scales:({xScale:.4f}x{yScale:.4f})   scale:{scale:.4f}")
-            self.scale_canvas(scale)
-            self.canvasScale = 1
+        if self.canon.points:
+            self.zoom_all()
 
     def scale_canvas(self, scale):
-        self.canvasScale *= scale
-#        print(f"scale_canvas:{scale:.4f}   total:{self.canvasScale}")
-        self.canvas.scale('all', 0, 0, scale, scale)
-        view, viewC, shape, shapeC, origin = self.get_canvas()
-#        print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
-        diffX = (view[0] - shape[0]) / 2
-        diffY = (view[1] - shape[1]) / 2
-#        print(f"diff:{diffX}x{diffY}")
-        moveX = -origin[0] + diffX
-        moveY = -origin[1] + diffY
-#        print(f"move:{moveX}x{moveY}")
-        self.canvas.move('all', moveX, moveY)
+        # scale only if conversational is active
+        if self.parent.tabs.get() == 'Conversational':
+#            print(f"w:{self.canvas.winfo_width()}   h:{self.canvas.winfo_height()}")
+            self.canvasScale *= scale
+#            print(f"scale_canvas:{scale:.4f}   total:{self.canvasScale}")
+            self.canvas.scale('all', 0, 0, scale, scale)
+            view, viewC, shape, shapeC, origin = self.get_canvas()
+#            print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
+            diffX = (view[0] - shape[0]) / 2
+            diffY = (view[1] - shape[1]) / 2
+#            print(f"diff:{diffX}x{diffY}")
+            moveX = -origin[0] + diffX
+            moveY = -origin[1] + diffY
+#            print(f"move:{moveX}x{moveY}")
+            self.canvas.move('all', moveX, moveY)
 
     def get_canvas(self):
 #        print('get_canvas')
         cWidth = self.canvas.winfo_width()
         cHeight = self.canvas.winfo_height()
+        self.canvasSize = (cWidth, cHeight)
         cCenter = (cWidth / 2, cHeight / 2)
         x1, y1, x2, y2 = self.canvas.bbox('all')
         vWidth = x2 - x1
         vHeight = y2 - y1
         vCenter = (vWidth / 2, vHeight / 2)
 #        print(f"canvas:{cWidth}x{cHeight} {cCenter}   view:{vWidth}x{vHeight} {vCenter}   ({x1},{y1})")
-        return (cWidth, cHeight), cCenter, (vWidth, vHeight), vCenter, (x1, y1)
+        return self.canvasSize, cCenter, (vWidth, vHeight), vCenter, (x1, y1)
 
     def pan_left(self):
         self.canvas.move('all', self.canvas.winfo_width() * -0.25, 0)
@@ -313,17 +307,26 @@ class Conversational():
         self.scale_canvas(0.5)
 
     def zoom_all(self):
-        self.scale_canvas(1 / self.canvasScale)
+        x1, y1, x2, y2 = self.canvas.bbox('all')
+        xScale = (self.canvas.winfo_width() * 0.96) / (x2 - x1)
+        yScale = (self.canvas.winfo_height() * 0.96) / (y2 - y1)
+        scale = min(xScale, yScale)
+#        print(f"scale:{scale}")
+        self.scale_canvas(scale)
+        self.canvasScale = 1
+
+    def resized(self, event):
+        if event.width != self.canvasSize[0] or event.height != self.canvasSize[1]:
+            self.canvasSize = (event.width, event.height)
+            self.zoom_all()
 
     def on_mouse_left_double(self, event):
         self.scale_canvas(1 / self.canvasScale)
 
     def on_mouse_left_press(self, event):
-#        self.canvas.scan_mark(event.x, event.y)
         self.mouseX, self.mouseY = event.x, event.y
 
     def on_mouse_drag(self, event):
-#        self.canvas.scan_dragto(event.x, event.y, gain=1)
         if event.x < self.mouseX:
             self.canvas.move('all', -10, 0)
         elif event.x > self.mouseX:
@@ -389,12 +392,12 @@ class Conversational():
 
     def preview(self, event):
 #        # this stops focus moving to the root when return pressed
-#        self.rE(f"after 5 focus {event.widget}")
+#        self.parent.eval(f"after 5 focus {event.widget}")
         self.module.preview(self)
 
     def auto_preview(self, event):
         # this stops focus moving to the root when return pressed
-#        self.rE(f"after 5 focus {event.widget}")
+#        self.parent.eval(f"after 5 focus {event.widget}")
         # we have no interest in this list of keys
         if event.keysym in ['Tab']:
             return
@@ -506,10 +509,7 @@ class Conversational():
                     CTkMessagebox(master=self.parent, title=title, message=message, icon='warning')
                     return
 #        self.vkb_show() if we add a virtual keyboard ??????????????????????????
-        filetypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
-        defaultextension = '.ngc'
-        file = None
-        file = filedialog.asksaveasfilename(filetypes=filetypes, defaultextension=defaultextension)
+        file = filedialog.asksaveasfilename(filetypes=self.parent.fileTypes, defaultextension=self.parent.defaultExtension)
         if file:
              print(file)
              copy(self.fNgc, file)
@@ -545,6 +545,9 @@ class Conversational():
         CONVSET.show(self)
 
     def send_pressed(self):
+        if self.standalone:
+            self.load_file()
+            return
         copy(self.fNgc, self.fNgcSent)
         #copy(self.fNgc, self.filteredBkp)
         self.existingFile = self.fNgc
@@ -597,7 +600,7 @@ class Conversational():
         self.oldModule = self.module
         if shape == 'block':
             # if self.o.canon is not None:
-            #     unitsMultiplier = 25.4 if self.unitsPerMm == 1 else 1
+            #     unitsMultiplier = 25.4 if self.parent.unitsPerMm == 1 else 1
             #     self.shapeLen['x'] = (self.o.canon.max_extents[0] - self.o.canon.min_extents[0]) * unitsMultiplier
             #     self.shapeLen['y'] = (self.o.canon.max_extents[1] - self.o.canon.min_extents[1]) * unitsMultiplier
             self.module = CONVBLO
@@ -637,11 +640,11 @@ class Conversational():
             self.spButton.configure(text = self.savedSettings['start_pos'])
             self.ctButton.configure(text = self.savedSettings['cut_type'])
         else:
-            self.ctButton.configure(text = _('EXTERNAL'))
+            self.ctButton.configure(text = _('External'))
             if self.origin:
-                self.spButton.configure(text = _('CENTER'))
+                self.spButton.configure(text = _('Center'))
             else:
-                self.spButton.configure(text = _('BTM LEFT'))
+                self.spButton.configure(text = _('Btm left'))
             self.liValue.set(f"{self.leadIn}")
             self.loValue.set(f"{self.leadOut}")
         self.module.widgets(self)
@@ -652,12 +655,12 @@ class Conversational():
         if state:
             self.saveC.configure(state = 'disabled')
             self.sendC.configure(state = 'disabled')
-            self.undoC.configure(text = _('UNDO'))
+            self.undoC.configure(text = _('Undo'))
         else:
             if self.validShape:
                 self.saveC.configure(state = 'normal')
                 self.sendC.configure(state = 'normal')
-            self.undoC.configure(text=_('RELOAD'))
+            self.undoC.configure(text=_('Reload'))
             self.addC.configure(state = 'disabled')
 
     def active_shape(self):
@@ -784,21 +787,21 @@ class Conversational():
                 elif child.winfo_name() == str(getattr(self, 'scEntry')).rsplit('.',1)[1]:
                     self.scValue.set('1.0')
                 elif child.winfo_name() == str(getattr(self, 'ocEntry')).rsplit('.',1)[1]:
-                    self.ocValue.set(f"{4 * self.unitsPerMm}")
+                    self.ocValue.set(f"{4 * self.parent.unitsPerMm}")
             child.grid_remove()
         self.show_common_widgets()
 
     def cut_type_clicked(self, circle=False):
-        if self.ctButton.cget('text') == _('EXTERNAL'):
-            self.ctButton.configure(text = _('INTERNAL'))
+        if self.ctButton.cget('text') == _('External'):
+            self.ctButton.configure(text = _('Internal'))
         else:
-            self.ctButton.configure(text = _('EXTERNAL'))
+            self.ctButton.configure(text = _('External'))
         if circle:
             try:
                 dia = float(self.dValue.get())
             except:
                 dia = 0
-            if dia >= self.smallHoleDia or dia == 0 or self.ctButton.cget('text') == _('EXTERNAL'):
+            if dia >= self.smallHoleDia or dia == 0 or self.ctButton.cget('text') == _('External'):
                 self.ocButton.configure(state = 'disabled')#, relief='raised', bg=self.bBackColor)
                 self.ocEntry.configure(state = 'disabled')
             else:
@@ -807,10 +810,10 @@ class Conversational():
         self.module.auto_preview(self)
 
     def start_point_clicked(self):
-        if self.spButton.cget('text') == _('BTM LEFT'):
-            self.spButton.configure(text = _('CENTER'))
+        if self.spButton.cget('text') == _('Btm left'):
+            self.spButton.configure(text = _('Center'))
         else:
-            self.spButton.configure(text = _('BTM LEFT'))
+            self.spButton.configure(text = _('Btm left'))
         self.module.auto_preview(self)
 
     def material_changed(self, material):
@@ -819,16 +822,14 @@ class Conversational():
     def show_common_widgets(self):
         self.spacer.grid(column=0, row=11, sticky='ns')
         self.previewC.grid(column=0, row=12, padx=3, pady=3)
-        if self.standalone:
-            self.loadC.grid(column=1, row=12, padx=3, pady=3)
-            self.addC.grid(column=2, row=12, padx=3, pady=3)
-        else:
-            self.addC.grid(column=1, row=12, columnspan=2, pady=3)
+        self.addC.grid(column=1, row=12, columnspan=2, pady=3)
         self.undoC.grid(column=3, row=12, padx=3, pady=3)
         self.sepline.grid(column=0, row=13, columnspan=4, sticky='ew', padx=8, pady=3)
         self.newC.grid(column=0, row=14, padx=3, pady=3)
         self.saveC.grid(column=1, row=14, padx=3, pady=3)
         self.settingsC.grid(column=2, row=14, padx=3, pady=3)
+        if self.standalone:
+            self.sendC.configure(text=_('Load'))
         self.sendC.grid(column=3, row=14, padx=3, pady=3)
 
     def create_toolbar_widgets(self):
@@ -851,89 +852,89 @@ class Conversational():
             s.destroy()
         width = 80 # width of label, entry, and button widgets
         widthM = 252 # width of material selector
-        self.matLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('MATERIAL'))
+        self.matLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Material'))
         self.matCombo = ctk.CTkComboBox(self.parent.convInput, width=widthM, justify='left', border_width=1, command=self.material_changed)
-        self.spLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('START'))
+        self.spLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Start'))
         self.spButton = ctk.CTkButton(self.parent.convInput, width=width)
-        self.ctLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('CUT TYPE'))
+        self.ctLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Cut type'))
         self.ctButton = ctk.CTkButton(self.parent.convInput, width=width)
-        self.xsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('X ORIGIN'))
+        self.xsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('X Origin'))
         self.xsValue = ctk.StringVar(value='0')
         self.xsEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.xsValue)
-        self.ysLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Y ORIGIN'))
+        self.ysLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Y Origin'))
         self.ysValue = ctk.StringVar(value='0')
         self.ysEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.ysValue)
-        self.liLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LEAD IN'))
+        self.liLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Lead in'))
         self.liValue = ctk.StringVar()
         self.liEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.liValue)
-        self.loLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LEAD OUT'))
+        self.loLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Lead out'))
         self.loValue = ctk.StringVar()
         self.loEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.loValue)
-        self.polyLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('TYPE'))
+        self.polyLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Type'))
         self.polyCombo = ctk.CTkComboBox(self.parent.convInput, justify='left', border_width=1)
-        self.sLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SIDES'))
+        self.sLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Sides'))
         self.sValue = ctk.StringVar()
         self.sEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.sValue)
-        self.dLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('DIAMETER'))
+        self.dLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Diameter'))
         self.dValue = ctk.StringVar()
         self.dEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.dValue)
-        self.lLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('LENGTH'))
+        self.lLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Length'))
         self.lValue = ctk.StringVar()
         self.lEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.lValue)
-        self.wLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('WIDTH'))
+        self.wLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Width'))
         self.wValue = ctk.StringVar()
         self.wEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.wValue)
-        self.hLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('HEIGHT'))
+        self.hLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Height'))
         self.hValue = ctk.StringVar()
-        self.aaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('A ANGLE'))
+        self.aaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('A Angle'))
         self.aaValue = ctk.StringVar()
         self.aaEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.aaValue)
-        self.alLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('a LENGTH'))
+        self.alLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('a Length'))
         self.alValue = ctk.StringVar()
         self.alEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.alValue)
-        self.baLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('B ANGLE'))
+        self.baLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('B angle'))
         self.baValue = ctk.StringVar()
         self.baEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.baValue)
-        self.blLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('b LENGTH'))
+        self.blLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('b Length'))
         self.blValue = ctk.StringVar()
         self.blEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.blValue)
-        self.caLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('C ANGLE'))
+        self.caLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('C Angle'))
         self.caValue = ctk.StringVar()
         self.caEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.caValue)
-        self.clLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('c LENGTH'))
+        self.clLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('c Length'))
         self.clValue = ctk.StringVar()
         self.clEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.clValue)
         self.hEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hValue)
-        self.hdLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('HOLE DIA'))
+        self.hdLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Hole dia'))
         self.hdValue = ctk.StringVar()
         self.hdEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hdValue)
-        self.hoLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('# HOLES'))
+        self.hoLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('# Holes'))
         self.hoValue = ctk.StringVar()
         self.hoEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hoValue)
-        self.bcaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('CIRCLE ANG'))
+        self.bcaLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Circle ang'))
         self.bcaValue = ctk.StringVar()
         self.bcaEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.bcaValue)
-        self.ocLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OVERCUT'))
+        self.ocLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Overcut'))
         self.ocValue = ctk.StringVar()
         self.ocEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.ocValue)
-        self.ocButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('OFF'))
-        self.pLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('POINTS'))
+        self.ocButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('Off'))
+        self.pLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Points'))
         self.pValue = ctk.StringVar()
         self.pEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.pValue)
-        self.odLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OUTER DIA'))
+        self.odLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Outer dia'))
         self.odValue = ctk.StringVar()
         self.odEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.odValue)
-        self.idLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('INNER DIA'))
+        self.idLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Inner dia'))
         self.idValue = ctk.StringVar()
         self.idEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.idValue)
-        self.rLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('RADIUS'))
-        self.rButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('RADIUS'))
+        self.rLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Radius'))
+        self.rButton = ctk.CTkButton(self.parent.convInput, width=width, text=_('Radius'))
         self.rValue = ctk.StringVar()
         self.rEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rValue)
-        self.saLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SEC ANGLE'))
+        self.saLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Sec angle'))
         self.saValue = ctk.StringVar(value='0')
         self.saEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.saValue)
-        self.aLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ANGLE'))
+        self.aLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Angle'))
         self.aValue = ctk.StringVar(value='0')
         self.aEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.aValue)
         self.r1Button = ctk.CTkButton(self.parent.convInput, width=width)
@@ -949,32 +950,32 @@ class Conversational():
         self.r4Value = ctk.StringVar()
         self.r4Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.r4Value)
         # block
-        self.ccLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('COLUMNS'))
-        self.cnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
+        self.ccLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Columns'))
+        self.cnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Number'))
         self.cnValue = ctk.StringVar(value='1')
         self.cnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.cnValue)
-        self.coLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
+        self.coLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Offset'))
         self.coValue = ctk.StringVar(value='0')
         self.coEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.coValue)
-        self.rrLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('ROWS'))
-        self.rnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('NUMBER'))
+        self.rrLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Rows'))
+        self.rnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Number'))
         self.rnValue = ctk.StringVar(value='1')
         self.rnEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rnValue)
-        self.roLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('OFFSET'))
+        self.roLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Offset'))
         self.roValue = ctk.StringVar(value='0')
         self.roEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.roValue)
-        self.bsLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('SHAPE'))
-        self.scLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SCALE'))
+        self.bsLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Shape'))
+        self.scLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Scale'))
         self.scValue = ctk.StringVar(value='1')
         self.scEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.scValue)
-        self.rtLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('ROTATION'))
+        self.rtLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Rotation'))
         self.rtValue = ctk.StringVar(value='0')
         self.rtEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.rtValue)
-        self.mirror = ctk.CTkButton(self.parent.convInput, width=width, text=_('MIRROR'))
-        self.flip = ctk.CTkButton(self.parent.convInput, width=width, text=_('FLIP'))
-        self.oLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('ORIGIN OFFSET'))
+        self.mirror = ctk.CTkButton(self.parent.convInput, width=width, text=_('Mirror'))
+        self.flip = ctk.CTkButton(self.parent.convInput, width=width, text=_('Flip'))
+        self.oLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Origin offset'))
         # lines and arcs
-        self.lnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('TYPE'))
+        self.lnLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Type'))
         self.lineCombo = ctk.CTkComboBox(self.parent.convInput, justify='left', border_width=1)
         self.l1Label = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text='')
         self.l1Value = ctk.StringVar()
@@ -996,32 +997,31 @@ class Conversational():
         self.l6Entry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.l6Value)
         self.g23Arc = ctk.CTkButton(self.parent.convInput, width=width, text='CW - G2')
         # settings
-        self.preLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('PREAMBLE'))
+        self.preLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Preamble'))
         self.preValue = ctk.StringVar()
         self.preEntry = ctk.CTkEntry(self.parent.convInput, width=width, border_width=1, textvariable=self.preValue)
-        self.pstLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('POSTAMBLE'))
+        self.pstLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Postamble'))
         self.pstValue = ctk.StringVar()
         self.pstEntry = ctk.CTkEntry(self.parent.convInput, width=width, border_width=1, textvariable=self.pstValue)
-        self.llLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('LEAD LENGTHS'))
-        self.shLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('SMALL HOLES'))
+        self.llLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Lead lengths'))
+        self.shLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Small holes'))
         self.shValue = ctk.StringVar()
         self.shEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.shValue)
         self.hsValue = ctk.StringVar()
         self.hsEntry = ctk.CTkEntry(self.parent.convInput, width=width, justify='right', border_width=1, textvariable=self.hsValue)
-        self.hsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('SPEED %'))
-        self.pvLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('PREVIEW'))
-        self.saveS = ctk.CTkButton(self.parent.convInput, width=width, text=_('SAVE'))
-        self.reloadS = ctk.CTkButton(self.parent.convInput, width=width, text=_('RELOAD'))
-        self.exitS = ctk.CTkButton(self.parent.convInput, width=width, text=_('EXIT'))
+        self.hsLabel = ctk.CTkLabel(self.parent.convInput, width=width, anchor='e', text=_('Speed %'))
+        self.pvLabel = ctk.CTkLabel(self.parent.convInput, width=width, text=_('Preview'))
+        self.saveS = ctk.CTkButton(self.parent.convInput, width=width, text=_('Save'))
+        self.reloadS = ctk.CTkButton(self.parent.convInput, width=width, text=_('Reload'))
+        self.exitS = ctk.CTkButton(self.parent.convInput, width=width, text=_('Exit'))
         # bottom
-        self.previewC = ctk.CTkButton(self.parent.convInput, width=width, text=_('PREVIEW'))
-        self.addC = ctk.CTkButton(self.parent.convInput, width=width, text=_('ADD'))
-        self.loadC = ctk.CTkButton(self.parent.convInput, width=width, text=_('LOAD'))
-        self.undoC = ctk.CTkButton(self.parent.convInput, width=width, text=_('UNDO'))
-        self.newC = ctk.CTkButton(self.parent.convInput, width=width, text=_('NEW'))
-        self.saveC = ctk.CTkButton(self.parent.convInput, width=width, text=_('SAVE'))
-        self.settingsC = ctk.CTkButton(self.parent.convInput, width=width, text=_('SETTINGS'))
-        self.sendC = ctk.CTkButton(self.parent.convInput, width=width, text=_('SEND'))
+        self.previewC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Preview'))
+        self.addC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Add'))
+        self.undoC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Undo'))
+        self.newC = ctk.CTkButton(self.parent.convInput, width=width, text=_('New'))
+        self.saveC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Save'))
+        self.settingsC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Settings'))
+        self.sendC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Send'))
         # spacer and separator
         self.spacer = ctk.CTkLabel(self.parent.convInput, text='')
         self.sepline = ctk.CTkFrame(self.parent.convInput, width = 120, height = 2, fg_color = '#808080')
@@ -1045,7 +1045,7 @@ class Conversational():
         self.buttons   = [self.spButton, self.ctButton, self.ocButton, self.rButton, self.r1Button, \
                           self.r2Button, self.r3Button, self.r4Button, self.mirror, self.flip, \
                           self.g23Arc, self.saveS, self.reloadS, self.exitS, self.previewC, self.addC, \
-                          self.loadC, self.undoC, self.newC, self.saveC, self.settingsC, self.sendC]
+                          self.undoC, self.newC, self.saveC, self.settingsC, self.sendC]
 #FIXME - takefocus not applicable for ctk
         # for button in self.buttons:
         #     print(f"button: {button._name}")
@@ -1059,7 +1059,6 @@ class Conversational():
             s.destroy()
 # PLOTTER WIDGETS
         previewButtons = ctk.CTkFrame(self.parent.convPreview, fg_color='transparent', width=20)
-        self.bgColor = previewButtons.cget('bg_color')
         previewButtons.grid(row=0, column=0, padx=3, pady=3, sticky='nsew')
         previewButtons.grid_rowconfigure((0, 10), weight=1)
         zoomIn = ctk.CTkButton(master = previewButtons, text = '+', command = self.zoom_in, width=40, height=40, font=('', 24))
@@ -1151,11 +1150,13 @@ class Canon:
                     startAngle = round(start, 4)
                     endAngle = round(end, 4)
                     # we can use an arc to simulate a circle but it cannot be a full 360 degrees
+#                    extent = endAngle - startAngle if endAngle - startAngle != 0 else 359.99
                     extent = endAngle - startAngle if endAngle - startAngle != 0 else 359.99
 # FIXME - a wacky and incorrect way to prevent arc being drawn in the reverse direction
+#          I really need to get cracking on a proper solution...
 #                    if (extent > 190 and extent < 359) or (extent < -190 and extent > -359):
-                    if (extent > 190) or (extent < -190):
-#                        print(f" BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
+                    if (extent > 190 or extent < -190) and extent != 359.99:
+#                        print(f"1 BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
                         if extent < 0:
                             extent = 360 - extent * -1
                         else:
@@ -1163,7 +1164,7 @@ class Canon:
                             extent = 360 - extent
                         #print(f"      new extent: {extent}")
 #                        if (extent > 180) or (extent < -180):
-#                            print(f" BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
+#                            print(f"2 BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
                     x1 = centerX - radius
                     y1 = (centerY - radius) * -1
                     x2 = centerX + radius
@@ -1241,6 +1242,8 @@ class Canon:
 class Window(ctk.CTk):
     def __init__(self, metric, materials):
         super().__init__()
+        ctk.set_default_color_theme('dark-blue')
+        ctk.set_appearance_mode('dark')
         self.geometry("1024x768")
         self.title("Standalone Conversational")
         self.borderColor = '#808080'
@@ -1255,85 +1258,37 @@ class Window(ctk.CTk):
         self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
         self.convPreview.grid_rowconfigure(0, weight=1)
         self.convPreview.grid_columnconfigure(1, weight=1)
-
-        # self.canvasFrame = ctk.CTkFrame(self.convPreview)
-        # self.canvasFrame.grid(row=0, column=1, sticky='nsew')
-        # self.update()
-        # print(f"self          W:{self.winfo_width()}   H:{self.winfo_height()}")
-        # print(f"convTools     W:{self.convTools.winfo_width()}   H:{self.convTools.winfo_height()}")
-        # print(f"convInput     W:{self.convInput.winfo_width()}   H:{self.convInput.winfo_height()}")
-        # print(f"convPreview   W:{self.convPreview.winfo_width()}   H:{self.convPreview.winfo_height()}")
-        # print(f"canvasFrame   W:{self.canvasFrame.winfo_width()}   H:{self.canvasFrame.winfo_height()}")
-
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.add('Conversational')
         self.comp = {'development': False}
-        matDict = {}
+        self.materialFileDict = {}
         if materials:
             num, nam, kw = None, None, None
             with open(materials, 'r') as inFile:
                 for line in inFile:
                     if line.startswith('[MATERIAL'):
                         num = int(line.split('R_')[1].replace(']', ''))
-                        matDict[num] = {}
+                        self.materialFileDict[num] = {}
                     elif line.startswith('NAME'):
                         nam = line.split('=')[1].strip()
-                        matDict[num]['name'] = nam
+                        self.materialFileDict[num]['name'] = nam
                     elif line.startswith('KERF'):
                         kw = line.split('=')[1].strip()
-                        matDict[num]['kerf_width'] = kw
+                        self.materialFileDict[num]['kerf_width'] = kw
         if metric:
-            unitsPerMm = 1
-            if not matDict:
-                matDict = {1: {'name': 'Material #1', 'kerf_width': 1.0}}
+            self.unitsPerMm = 1
+            if not self.materialFileDict:
+                self.materialFileDict = {1: {'name': 'Material #1', 'kerf_width': 1.0}}
         else:
-            unitsPerMm = 0.03937
-            if not matDict:
-                matDict = {1: {'name': 'Material #1', 'kerf_width': 0.04}}
-        matNum = 0
-        conv = Conversational(self, unitsPerMm, matDict, matNum, True)
-        conv.start()
+            self.unitsPerMm = 0.03937
+            if not self.materialFileDict:
+                self.materialFileDict = {1: {'name': 'Material #1', 'kerf_width': 0.04}}
+        self.matNum = 0
+        self.fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
+        self.initialDir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
+        self.defaultExtension = '.ngc'
+        Conversational(self, True)
 
 if __name__ == '__main__':
-    error = ''
-    metric = True
-    materials = None
-    args = sys.argv[1:]
-    if len(args):
-        if '-i' in args:
-            metric = False
-        if '-m' in args:
-            file = args[args.index('-m') + 1] if '-l' != args[-1] else ''
-            if os.path.isfile(file):
-                materials = file
-            else:
-                error += f"invalid materials file:      {file}\n"
-        if '-l' in args:
-            path = args[args.index('-l') + 1] if '-l' != args[-1] else ''
-            if os.path.isdir(path):
-                sys.path.append(os.path.join(path, 'lib/python'))
-            else:
-                error += f"invalid linuxcnc repository: {path}\n"
-    else: # this is temp to allow easy run from ctrl-r within vscode
-        materials = os.path.expanduser('~/linuxcnc/configs/0_qtplasmac_metric/metric_material.cfg')
-        sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
-    if error:
-        usage  = 'Stand-alone options are:\n'
-        usage += '  -i          - Imperial mode, metric is the default\n'
-        usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
-        usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
-        print(f"\nError:\n{error}\n{usage}")
-        sys.exit()
-    import conv_settings as CONVSET
-    import conv_line as CONVLIN
-    import conv_circle as CONVCIR
-    import conv_ellipse as CONVELL
-    import conv_triangle as CONVTRI
-    import conv_rectangle as CONVREC
-    import conv_polygon as CONVPOL
-    import conv_bolt as CONVBOL
-    import conv_slot as CONVSLO
-    import conv_star as CONVSTA
-    import conv_gusset as CONVGUS
-    import conv_sector as CONVSEC
-    import conv_block as CONVBLO
     app = Window(metric, materials)
     app.mainloop()

@@ -35,23 +35,23 @@ def save_clicked(self):
     msg = []
     self.preAmble = self.preValue.get()
     self.postAmble = self.pstValue.get()
-    self.origin = self.spButton.cget('text') == 'CENTER'
+    self.origin = self.spButton.cget('text') == 'Center'
     error = ''
     valid, self.leadIn = self.conv_is_float(self.liValue.get())
     if not valid:
-        msg = _('Invalid LEAD IN entry detected')
+        msg = _('Invalid Lead in entry detected')
         error += f"{msg}\n\n"
     valid, self.leadOut = self.conv_is_float(self.loValue.get())
     if not valid:
-        msg = _('Invalid LEAD OUT entry detected')
+        msg = _('Invalid Lead out entry detected')
         error += f"{msg}\n\n"
     valid, self.smallHoleDia = self.conv_is_float(self.shValue.get())
     if not valid:
-        msg = _('Invalid DIAMETER entry detected')
+        msg = _('Invalid Diameter entry detected')
         error += f"{msg}\n\n"
     valid, self.smallHoleSpeed = self.conv_is_int(self.hsValue.get())
     if not valid:
-        msg = _('Invalid SPEED % entry detected')
+        msg = _('Invalid Speed % entry detected')
         error += f"{msg}\n\n"
     if error:
         self.dialog_show_ok(_('Settings Error'), error)
@@ -102,10 +102,10 @@ def show(self):
     self.hsValue.set(f"{self.smallHoleSpeed}")
     if self.origin:
 #        self.spbValue.set('CENTER')
-        self.spButton.configure(text = _('CENTER'))
+        self.spButton.configure(text = _('Center'))
     else:
 #        self.spbValue.set('BTM LEFT')
-        self.spButton.configure(text = _('BTM LEFT'))
+        self.spButton.configure(text = _('Btm left'))
 
 def widgets(self):
     print(f"self: {self}")

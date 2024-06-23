@@ -36,9 +36,9 @@ gettext.install('linuxcnc', localedir=localeDir)
 def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
-    isCenter = self.spButton.cget('text') == _('CENTER')
-    isExternal = self.ctButton.cget('text') == _('EXTERNAL')
-    kerfWidth = self.materials[matNum]['kerf_width']
+    isCenter = self.spButton.cget('text') == _('Center')
+    isExternal = self.ctButton.cget('text') == _('External')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
     error = POLYGON.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \
@@ -61,10 +61,10 @@ def auto_preview(self):
 
 def mode_changed(self, value):
 #    self.polyCombo.selection_clear()
-    if value == _('SIDE LENGTH'):
-        self.dLabel.configure(text = _('LENGTH'))
+    if value == _('Side length'):
+        self.dLabel.configure(text = _('Length'))
     else:
-        self.dLabel.configure(text = _('DIAMETER'))
+        self.dLabel.configure(text = _('Diameter'))
     auto_preview(self)
 
 def widgets(self):
@@ -75,10 +75,10 @@ def widgets(self):
         self.sValue.set('')
         self.dValue.set('')
         self.aValue.set('')
-    if self.polyCombo.get() == _('SIDE LENGTH'):
-        self.dLabel['text'] = _('LENGTH')
+    if self.polyCombo.get() == _('Side length'):
+        self.dLabel['text'] = _('Length')
     else:
-        self.dLabel['text'] = _('DIAMETER')
+        self.dLabel['text'] = _('Diameter')
     #connections
     self.ctButton.configure(command=lambda:self.cut_type_clicked())
     self.spButton.configure(command=lambda:self.start_point_clicked())

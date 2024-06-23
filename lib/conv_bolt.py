@@ -36,9 +36,9 @@ gettext.install('linuxcnc', localedir=localeDir)
 def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
-    isCenter = self.spButton.cget('text') == _('CENTER')
-    isOvercut = self.ocEntry.cget('state') == 'normal' and self.ocButton.cget('text') == _('ON')
-    kerfWidth = self.materials[matNum]['kerf_width']
+    isCenter = self.spButton.cget('text') == _('Center')
+    isOvercut = self.ocEntry.cget('state') == 'normal' and self.ocButton.cget('text') == _('On')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
     error = BOLT.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \
@@ -57,8 +57,8 @@ def preview(self):
         self.preview_button_pressed(True)
 
 def overcut_clicked(self):
-    if self.ocButton.cget('text') == _('OFF'):
-        self.ocButton.configure(text = _('ON'))
+    if self.ocButton.cget('text') == _('Off'):
+        self.ocButton.configure(text = _('On'))
         try:
             lolen = float(self.loValue.get())
         except:
@@ -72,7 +72,7 @@ def overcut_clicked(self):
         else:
             self.ocEntry.configure(state = 'normal')
     else:
-        self.ocButton.configure(text = _('OFF'))
+        self.ocButton.configure(text = _('Off'))
     auto_preview(self)
 
 def auto_preview(self):
@@ -90,7 +90,7 @@ def widgets(self):
         self.bcaValue.set('360')
         self.aValue.set('')
         self.ocButton.configure(state = 'disabled')
-    self.dLabel.configure(text = _('DIAMETER'))
+    self.dLabel.configure(text = _('Diameter'))
     #connections
     self.spButton.configure(command=lambda:self.start_point_clicked())
     self.ocButton.configure(command=lambda:overcut_clicked(self))

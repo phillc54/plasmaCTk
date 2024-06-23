@@ -5,13 +5,12 @@ import sys
 import linuxcnc
 import hal
 import customtkinter as ctk
-#import tkinter as tk
-#from tkinter.filedialog import askopenfilename
+from customtkinter import filedialog
 
 APPDIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(APPDIR, 'lib'))
-print(f"CWD: {os.getcwd()}")
-print(f"CFD: {APPDIR}")
+print(f"   CWD: {os.getcwd()}")
+print(f"APPDIR: {APPDIR}")
 #configPath = os.getcwd()
 #p2Path = os.path.join(configPath, 'plasmac2')
 #if os.path.isdir(os.path.join(p2Path, 'lib')):
@@ -38,23 +37,28 @@ class App(ctk.CTk):
         self.after(100, self.periodic)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
-
+        self.C = linuxcnc.command()
+        self.S = linuxcnc.stat()
+        self.E = linuxcnc.error()
         try:
             self.comp = hal.component('plasmactk-ui')
             self.create_hal_pins(self.comp)
             self.comp.ready()
+            self.S.poll()
 #FIXME   this is just for testing purposes and needs to be removed when completed
             hal.set_p('plasmac.cut-feed-rate', '1')
         except:
             print('\nCannot create hal component\nIs LinuxCNC running?\nRunning in development mode...\n')
             self.comp = {'development': True}
 
-        # self.initialDir = os.path.join(os.path.expanduser('~'), 'linuxcnc/nc_files')
-        self.initialDir = os.path.join(os.path.expanduser('~'), 'Downloads/gcode_plot')
+        
         self.borderColor = '#808080'
         self.userButtons = {}
         self.userButtonCodes = {}
-
+        self.fileLoaded = None
+        self.fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
+        self.initialDir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
+        self.defaultExtension = '.ngc'
         # create the gui
         self.create_gui()
 
@@ -124,11 +128,21 @@ class App(ctk.CTk):
     def dry_run_clicked(self):
         print('Dry Run clicked')
 
+##############################################################################
+# main 1 buttons
+##############################################################################
+
+    def open_clicked(self):
+        file = filedialog.askopenfile(initialdir=self.initialDir, filetypes=self.fileTypes)
+        if not file:
+            return
+        print('load file into LinuxCNC here')
+        self.fileLoaded = file
+        self.conv.load_file(file)
 
 ##############################################################################
 # user buttons
 ##############################################################################
-
 
     def torch_enable_clicked(self):
         print('Torch Enable clicked')
@@ -148,7 +162,6 @@ class App(ctk.CTk):
 
     def user_button_released(self, button):
         print(f'User Button #{button:0>{2}} released, code is {self.userButtonCodes[button]}')
-
 
 ##############################################################################
 # hal pin setup
@@ -177,8 +190,10 @@ class App(ctk.CTk):
 ##############################################################################
     def create_gui(self):
 
-        materialFileDictTmp = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
+        # temporary for conversational testing
+        self.materialFileDict = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
         self.unitsPerMm = 1
+        self.matNum = 0
 
         self.create_tabs()# = Tabs(self)
         self.create_main_button_frame()
@@ -191,7 +206,7 @@ class App(ctk.CTk):
         self.create_conversational_toolbar_frame()
         self.create_conversational_preview_frame()
         self.create_conversational_input_frame()
-        self.conv = conversational.Conversational(self, self.unitsPerMm, materialFileDictTmp, 1)
+        self.conv = conversational.Conversational(self, False)
         self.create_parameters_1_frame()
         self.create_parameters_2_frame()
         self.create_parameters_3_frame()
@@ -207,11 +222,6 @@ class App(ctk.CTk):
 
         def tab_changed(tab):
             print(f"{tab} is active")
-            if tab == 'Conversational':
-#                materialFileDictTmp = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
-                #self.conv.start(materialFileDict, matIndex, vars.taskfile.get(), s.g5x_index, commands.set_view_z)
-#                self.conv.start(self.unitsPerMm, materialFileDictTmp, 1)#, vars.taskfile.get(), s.g5x_index, commands.set_view_z)
-                self.conv.start()#, vars.taskfile.get(), s.g5x_index, commands.set_view_z)
 
         self.tabs = ctk.CTkTabview(self, height=1, anchor='sw', command=lambda: tab_changed(self.tabs.get()))
         self.tabs.add('Main')
@@ -287,6 +297,9 @@ class App(ctk.CTk):
         ''' main tab ??? frame '''
         self.main1Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
         self.main1Frame.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
+
+        self.open = ctk.CTkButton(self.main1Frame, text='Open', command=self.open_clicked)
+        self.open.grid(row=0, column=0, padx=(3,1), pady=(3,0), sticky='nsew')
 
     def create_main_2_frame(self):
         ''' main tab ??? frame '''
@@ -371,7 +384,6 @@ class App(ctk.CTk):
         self.status3 = ctk.CTkFrame(self.tabs.tab('Status'), border_width=1, border_color=self.borderColor)
         self.status3.grid(row=0, column=2, padx=1, pady = 1, sticky='nsew')
 
-
 class hSeparator(ctk.CTkFrame):
     ''' horizontal separator '''
     def __init__(self, *args,
@@ -380,7 +392,6 @@ class hSeparator(ctk.CTkFrame):
                  fg_color: str = '#808080',
                  **kwargs):
         super().__init__(*args, width=width, height=height, fg_color=fg_color, **kwargs)
-
 
 class vSeparator(ctk.CTkFrame):
     ''' horizontal separator '''
@@ -391,7 +402,5 @@ class vSeparator(ctk.CTkFrame):
                  **kwargs):
         super().__init__(*args, width=width, height=height, fg_color=fg_color, **kwargs)
 
-
 app = App()
 app.mainloop()
-

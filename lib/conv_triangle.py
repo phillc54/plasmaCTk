@@ -36,8 +36,8 @@ gettext.install('linuxcnc', localedir=localeDir)
 def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
-    isExternal = self.ctButton.cget('text') == _('EXTERNAL')
-    kerfWidth = self.materials[matNum]['kerf_width']
+    isExternal = self.ctButton.cget('text') == _('External')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
     error = TRIANGLE.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \

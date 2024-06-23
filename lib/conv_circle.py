@@ -37,10 +37,10 @@ def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
     print(f"preview   matNum:{matNum}   matNam:{matNam}")
-    isCenter = self.spButton.cget('text') == _('CENTER')
-    isExternal = self.ctButton.cget('text') == _('EXTERNAL')
-    isOvercut = self.ocEntry.cget('state') == 'normal' and self.ocButton.cget('text') == _('ON')
-    kerfWidth = self.materials[matNum]['kerf_width']
+    isCenter = self.spButton.cget('text') == _('Center')
+    isExternal = self.ctButton.cget('text') == _('External')
+    isOvercut = self.ocEntry.cget('state') == 'normal' and self.ocButton.cget('text') == _('On')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
     error = CIRCLE.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \
@@ -63,8 +63,8 @@ def auto_preview(self, button=False):
         preview(self)
 
 def overcut_clicked(self):
-    if self.ocButton.cget('text') == _('OFF'):
-        self.ocButton.configure(text = _('ON'))
+    if self.ocButton.cget('text') == _('Off'):
+        self.ocButton.configure(text = _('On'))
         try:
             lolen = float(self.loValue.get())
         except:
@@ -73,12 +73,12 @@ def overcut_clicked(self):
             dia = float(self.dValue.get())
         except:
             dia = 0
-        if (self.ctButton.cget('text') == _('EXTERNAL') and lolen) or not dia or dia > self.smallHoleDia:
+        if (self.ctButton.cget('text') == _('External') and lolen) or not dia or dia > self.smallHoleDia:
             return
         else:
             self.ocEntry.configure(state = 'normal')
     else:
-        self.ocButton.configure(text = _('OFF'))
+        self.ocButton.configure(text = _('Off'))
 
 def widgets(self):
     if self.parent.comp['development']:
@@ -87,7 +87,7 @@ def widgets(self):
     if not self.settingsExited:
         self.ocButton.configure(state = 'disabled')
         self.dValue.set('')
-    self.dLabel.configure(text =_('DIAMETER'))
+    self.dLabel.configure(text =_('Diameter'))
     #connections
     self.ctButton.configure(command=lambda:self.cut_type_clicked(True))
     self.spButton.configure(command=lambda:self.start_point_clicked())

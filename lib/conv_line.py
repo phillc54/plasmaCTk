@@ -37,7 +37,7 @@ def preview(self):
     if self.convLine['xLineEnd'] != self.conv_is_float(self.l1Value.get()) or \
        self.convLine['yLineEnd'] != self.conv_is_float(self.l2Value.get()):
         self.convLine['addSegment'] = 0
-    if self.lineCombo.get() == _('LINE POINT ~ POINT'):
+    if self.lineCombo.get() == _('Line point to point'):
         error = LINE.do_line_point_to_point(self, self.l1Value.get(), self.l2Value.get(), \
                                             self.l3Value.get(), self.l4Value.get())
         if not error[0]:
@@ -47,7 +47,7 @@ def preview(self):
         else:
             error_set(self, f'{error[1]}\n')
             return
-    elif self.lineCombo.get() == _('LINE BY ANGLE'):
+    elif self.lineCombo.get() == _('Line by angle'):
         error = LINE.do_line_by_angle(self, self.l1Value.get(), self.l2Value.get(), \
                                       self.l3Value.get(), self.l4Value.get())
         if not error[0]:
@@ -57,7 +57,7 @@ def preview(self):
         else:
             error_set(self, f'{error[1]}\n')
             return
-    elif self.lineCombo.get() == _('ARC 3P'):
+    elif self.lineCombo.get() == _('Arc 3 point'):
         error = LINE.do_arc_3_points(self, self.l1Value.get(), self.l2Value.get(), \
                                      self.l3Value.get(), self.l4Value.get(), \
                                      self.l5Value.get(), self.l6Value.get())
@@ -68,7 +68,7 @@ def preview(self):
         else:
             error_set(self, f'{error[1]}\n')
             return
-    elif self.lineCombo.get() == _('ARC 2P +RADIUS'):
+    elif self.lineCombo.get() == _('Arc 2 point + radius'):
         arcType = '3' if 'CCW' in self.g23Arc.cget('text') else '2'
         error = LINE.do_arc_2_points_radius(self, self.l1Value.get(), self.l2Value.get(), self.l3Value.get(), \
                                                   self.l4Value.get(), self.l5Value.get(), arcType)
@@ -79,7 +79,7 @@ def preview(self):
         else:
             error_set(self, f'{error[1]}\n')
             return
-    elif self.lineCombo.get() == _('ARC ANGLE +RADIUS'):
+    elif self.lineCombo.get() == _('Arc angle + radius'):
         arcType = '3' if 'CCW' in self.g23Arc.cget('text') else '2'
         error = LINE.do_arc_by_angle_radius(self, self.l1Value.get(), self.l2Value.get(), self.l3Value.get(),
                                                   self.l4Value.get(), self.l5Value.get(), arcType)
@@ -110,11 +110,11 @@ def preview(self):
 
 def auto_preview(self):
     if self.l1Value.get() and self.l2Value.get() and self.l3Value.get() and self.l4Value.get():
-        if self.lineCombo.get() == _('LINE POINT ~ POINT') or \
-           self.lineCombo.get() == _('LINE BY ANGLE') or \
-           (self.lineCombo.get() == _('ARC 3P') and self.l5Value.get() and self.l6Value.get()) or \
-           (self.lineCombo.get() == _('ARC 2P +RADIUS') and self.l5Value.get()) or \
-           (self.lineCombo.get() == _('ARC ANGLE +RADIUS') and self.l5Value.get()):
+        if self.lineCombo.get() == _('Line point to point') or \
+           self.lineCombo.get() == _('Line by angle') or \
+           (self.lineCombo.get() == _('Arc 3 point') and self.l5Value.get() and self.l6Value.get()) or \
+           (self.lineCombo.get() == _('Arc 2 point + radius') and self.l5Value.get()) or \
+           (self.lineCombo.get() == _('Arc angle + radius') and self.l5Value.get()):
             preview(self)
 
 def arc_type_changed(self):
@@ -124,19 +124,19 @@ def arc_type_changed(self):
 
 def line_type_changed(self, text, refresh):
 #    self.lineCombo.selection_clear()
-    if text == _('LINE POINT ~ POINT'):
+    if text == _('Line point to point'):
         if not refresh:
             set_line_point_to_point(self)
-    elif text == _('LINE BY ANGLE'):
+    elif text == _('Line by angle'):
         if not refresh:
             set_line_by_angle(self)
-    elif text == _('ARC 3P'):
+    elif text == _('Arc 3 point'):
         if not refresh:
             set_arc_3_points(self)
-    elif text == _('ARC 2P +RADIUS'):
+    elif text == _('Arc 2 point + radius'):
         if not refresh:
             set_arc_2_points_radius(self)
-    elif text == _('ARC ANGLE +RADIUS'):
+    elif text == _('Arc angle + radius'):
         if not refresh:
             set_arc_by_angle_radius(self)
     self.l3Entry.focus()
@@ -150,16 +150,16 @@ def clear_widgets(self):
     self.g23Arc.grid_remove()
 
 def set_start_point(self):
-    text = _('START')
-    self.l1Label.configure(text = _('X START'))
+    text = _('Start')
+    self.l1Label.configure(text = _('X Start'))
     self.l1Value.set(f'{self.convLine["xLineStart"]:0.3f}')
-    self.l2Label.configure(text = _('Y START'))
+    self.l2Label.configure(text = _('Y Start'))
     self.l2Value.set(f'{self.convLine["yLineStart"]:0.3f}')
 
 def set_line_point_to_point(self):
     clear_widgets(self)
-    self.l3Label.configure(text = _('X END'))
-    self.l4Label.configure(text = _('Y END'))
+    self.l3Label.configure(text = _('X End'))
+    self.l4Label.configure(text = _('Y End'))
     for w in [self.l3Value, self.l4Value]:
         w.set('')
     self.l3Entry.grid(column=1, row=4, pady=(3))
@@ -167,8 +167,8 @@ def set_line_point_to_point(self):
 
 def set_line_by_angle(self):
     clear_widgets(self)
-    self.l3Label.configure(text = _('LENGTH'))
-    self.l4Label.configure(text = _('ANGLE'))
+    self.l3Label.configure(text = _('Length'))
+    self.l4Label.configure(text = _('Angle'))
     self.l4Value.set('0.000')
     for w in [self.l3Value, self.l4Value]:
         w.set('')
@@ -177,10 +177,10 @@ def set_line_by_angle(self):
 
 def set_arc_3_points(self):
     clear_widgets(self)
-    self.l3Label.configure(text = _('X NEXT'))
-    self.l4Label.configure(text = _('Y NEXT'))
-    self.l5Label.configure(text = _('X END'))
-    self.l6Label.configure(text = _('Y END'))
+    self.l3Label.configure(text = _('X Next'))
+    self.l4Label.configure(text = _('Y Next'))
+    self.l5Label.configure(text = _('X End'))
+    self.l6Label.configure(text = _('Y End'))
     for w in [self.l3Value, self.l4Value, self.l5Value, self.l6Value]:
         w.set('')
     self.l3Entry.grid(column=1, row=4, pady=3)
@@ -190,11 +190,11 @@ def set_arc_3_points(self):
 
 def set_arc_2_points_radius(self):
     clear_widgets(self)
-    self.l3Label.configure(text = _('X END'))
-    self.l4Label.configure(text = _('Y END'))
-    self.l5Label.configure(text = _('RADIUS'))
+    self.l3Label.configure(text = _('X End'))
+    self.l4Label.configure(text = _('Y End'))
+    self.l5Label.configure(text = _('Radius'))
     self.l5Value.set('0.000')
-    self.l6Label.configure(text = _('DIRECTION'))
+    self.l6Label.configure(text = _('Direction'))
     for w in [self.l3Value, self.l4Value, self.l5Value]:
         w.set('')
     self.l3Entry.grid(column=1, row=4, pady=3)
@@ -204,11 +204,11 @@ def set_arc_2_points_radius(self):
 
 def set_arc_by_angle_radius(self):
     clear_widgets(self)
-    self.l3Label.configure(text = _('LENGTH'))
-    self.l4Label.configure(text = _('ANGLE'))
+    self.l3Label.configure(text = _('Length'))
+    self.l4Label.configure(text = _('Angle'))
     self.l4Value.set('0.000')
-    self.l5Label.configure(text = _('RADIUS'))
-    self.l6Label.configure(text = _('DIRECTION'))
+    self.l5Label.configure(text = _('Radius'))
+    self.l6Label.configure(text = _('Direction'))
     for w in [self.l3Value, self.l4Value, self.l5Value]:
         w.set('')
     self.l3Entry.grid(column=1, row=4, pady=3)
@@ -228,9 +228,11 @@ def widgets(self):
         self.dValue.set('')
         self.convLine['xLineStart'] = 0.0
         self.convLine['yLineStart'] = 0.0
+        self.convLine['xLineEnd'] = 0.0
+        self.convLine['yLineEnd'] = 0.0
         self.convLine['addSegment'] = 0
         self.convLine['gcodeSave'] = ''
-    self.dLabel.configure(text = _('DIAMETER'))
+    self.dLabel.configure(text = _('Diameter'))
     #connections
     self.previewC.configure(command = lambda:preview(self))
     self.g23Arc.configure(command = lambda:arc_type_changed(self))

@@ -36,8 +36,8 @@ gettext.install('linuxcnc', localedir=localeDir)
 def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
-    isExternal = self.ctButton.cget('text') == _('EXTERNAL')
-    kerfWidth = self.materials[matNum]['kerf_width']
+    isExternal = self.ctButton.cget('text') == _('External')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
     error = GUSSET.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \
@@ -59,10 +59,10 @@ def auto_preview(self):
         preview(self)
 
 def radius_button_pressed(self, value):
-    if value.get().split()[0] == _('RADIUS'):
-        text = _('CHAMFER')
+    if value.get().split()[0] == _('Radius'):
+        text = _('Chamfer')
     else:
-        text = _('RADIUS')
+        text = _('Radius')
     value.set(text)
     auto_preview(self)
 

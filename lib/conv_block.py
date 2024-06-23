@@ -82,9 +82,9 @@ def get_parameters(self):
         # maybe check here for old style rotate, scale, and array
         if line.startswith(';conversational block'):
             self.convBlock = [True, True]
-        elif 'G21' in line.upper().replace(' ', '') and self.unitsPerMm != 1:
+        elif 'G21' in line.upper().replace(' ', '') and self.parent.unitsPerMm != 1:
             self.convUnits = [25.4, 'G21']
-        elif 'G20' in line.upper().replace(' ', '') and self.unitsPerMm == 1:
+        elif 'G20' in line.upper().replace(' ', '') and self.parent.unitsPerMm == 1:
             self.convUnits = [0.03937, 'G20']
         elif 'm3' in line:
             break

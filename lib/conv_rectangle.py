@@ -37,18 +37,17 @@ gettext.install('linuxcnc', localedir=localeDir)
 def preview(self):
     matNum = int(self.matCombo.get().split(':')[0])
     matNam = self.matCombo.get().split(':')[1].strip()
-    isCenter = self.spButton.cget('text') == _('CENTER')
-    isExternal = self.ctButton.cget('text') == _('EXTERNAL')
-    isOvercut = self.ocButton.cget('state') == 'normal' and self.ocButton.cget('text') == _('ON')
-    kerfWidth = self.materials[matNum]['kerf_width']
-    styles = [None, 'radius', 'radius', 'radius', 'radius']
+    isCenter = self.spButton.cget('text') == _('Center')
+    isExternal = self.ctButton.cget('text') == _('External')
+    isOvercut = self.ocButton.cget('state') == 'normal' and self.ocButton.cget('text') == _('On')
+    kerfWidth = self.parent.materialFileDict[matNum]['kerf_width']
+    styles = [None, 'extRadius', 'extRadius', 'extRadius', 'extRadius']
     values = [None, self.r1Button.cget('text'), self.r2Button.cget('text'), self.r3Button.cget('text'), self.r4Button.cget('text')]
     for n in range(1, 5):
-        if values[n].startswith(_('CHAMFER')):
+        if values[n].startswith(_('Chamfer')):
             styles[n] = 'chamfer'
-        elif values[n].startswith(_('FILLET')):
-            styles[n] = 'fillet'
-    print(f"C:{isCenter}   X:{self.xsValue.get()}   Y:{self.ysValue.get()}")
+        elif values[n].startswith(_('Fillet')):
+            styles[n] = 'intRadius'
     error = RECTANGLE.preview(self, self.fTmp, self.fNgc, self.fNgcBkp, \
             matNum, matNam, \
             self.preAmble, self.postAmble, \
@@ -72,14 +71,13 @@ def auto_preview(self):
         preview(self)
 
 def radius_button_pressed(self, button, sequence):
-    print(self, button, sequence)
-    if button.cget('text')[:-1] == _('RADIUS'):
-        text = _('CHAMFER')
-    elif button.cget('text')[:-1] == _('CHAMFER'):
-        text = _('FILLET')
+    if button.cget('text')[:-2] == _('Radius'):
+        text = _('Chamfer')
+    elif button.cget('text')[:-2] == _('Chamfer'):
+        text = _('Fillet')
     else:
-        text = _('RADIUS')
-    button.configure(text=f'{text}{sequence}')
+        text = _('Radius')
+    button.configure(text=f'{text} {sequence}')
     auto_preview(self)
 
 def widgets(self):
@@ -91,13 +89,13 @@ def widgets(self):
         self.hValue.set('')
         self.aValue.set('')
         self.r1Value.set('')
-        self.r1Button.configure(text=_('RADIUS1'))
+        self.r1Button.configure(text=_('Radius 1'))
         self.r2Value.set('')
-        self.r2Button.configure(text=_('RADIUS2'))
+        self.r2Button.configure(text=_('Radius 2'))
         self.r3Value.set('')
-        self.r3Button.configure(text=_('RADIUS3'))
+        self.r3Button.configure(text=_('Radius 3'))
         self.r4Value.set('')
-        self.r4Button.configure(text=_('RADIUS4'))
+        self.r4Button.configure(text=_('Radius 4'))
     #connections
     self.ctButton.configure(command=lambda:self.cut_type_clicked())
     self.spButton.configure(command=lambda:self.start_point_clicked())
