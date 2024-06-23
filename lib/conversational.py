@@ -235,7 +235,8 @@ class Conversational():
         self.canvas.create_line((0, 0), (10, 0), width=1, fill='green', tags=('origin'))
         self.canvas.create_line((0, 0), (0, -10), width=1, fill='red', tags=('origin'))
         for point in self.canon.points:
-            if point['shape'] == 'arc': # arcs
+            # arcs
+            if point['shape'] == 'arc':
                 count += 1
                 self.canvas.create_arc(point['x1'],
                                        point['y1'],
@@ -247,12 +248,11 @@ class Conversational():
                                        outline='gray90',
                                        style='arc',
                                        tags=('shape'))
-#                if (point['extent'] > 190 and point['extent'] < 359) or (point['extent'] < -190 and point['extent'] > -359):
-#                if (point['extent'] > 190) or (point['extent'] < -190):
-#                    print(f"BAD {count}: self.canvas.create_arc({point['x1']:.2f}, {point['y1']:.2f}, {point['x2']:.2f}, {point['y2']:.2f}, start={point['startAngle']:.2f}, extent={point['extent']:.2f}, style='arc', width=1, outline='cyan')")
-            elif point['shape'] == 'line': # lines
+            # lines
+            elif point['shape'] == 'line':
                 self.canvas.create_line(point['points'], width=1, fill='gray90',tags=('shape'))
-            elif point['shape'] == 'rapid' and self.showRapids: # rapids
+            # rapids
+            elif point['shape'] == 'rapid' and self.showRapids:
                 self.canvas.create_line(point['points'], width=1, fill='gray60',tags=('shape'))
         self.parent.update()
         if self.canon.points:
@@ -1089,8 +1089,6 @@ class Canon:
         self.angle = 0.0
         self.g5x_offset = ()
 
-        self.count = 0
-
     def __getattr__(self, attr):
 
         def set_units(f):
@@ -1100,8 +1098,8 @@ class Canon:
             return f
 
         def inner(*args):
-            ''' adds shapes to the points list 
-                we negate the y axis coordinates to suit the silly tkinter canvas '''
+            ''' adds shapes to the points list
+                we invert the outgoing y axis coordinates to suit the silly upside-down tkinter canvas '''
             if attr not in ['arc_feed', 'straight_feed', 'straight_traverse', 'set_g5x_offset', 'set_xy_rotation']:
                 return
             # no need to scale angles
@@ -1133,9 +1131,6 @@ class Canon:
             endX = round(self.offsetX + (args[0] * math.cos(self.angle) - args[1] * math.sin(self.angle)), 4)
             endY = round(self.offsetY + (args[0] * math.sin(self.angle) + args[1] * math.cos(self.angle)), 4)
             if attr == 'arc_feed': # arcs
-
-                self.count += 1
-
                 # set arc parameters
                 if len(self.points): # if start point exists
                     # set arc center coordinates
@@ -1143,38 +1138,37 @@ class Canon:
                     centerY = round(self.offsetY + (args[2] * math.sin(self.angle) + args[3] * math.cos(self.angle)), 4)
                     # set arc radius
                     radius = round(math.sqrt((centerX - endX)**2 + (centerY - endY)**2), 4)
-                    dir = 1
-                    start = round(math.degrees(math.atan2(startY - centerY, startX - centerX)) * dir, 4)
-                    end = round(math.degrees(math.atan2(endY - centerY, endX - centerX)) * dir, 4)
-#                    print(f"1:   s:{start} e:{end} d:{dir} a:{args[4]}   sx:{startX} cx:{centerX} ex:{endX}   sy:{startY} cy:{centerY} ey:{endY}   r:{radius}")
-                    startAngle = round(start, 4)
-                    endAngle = round(end, 4)
-                    # we can use an arc to simulate a circle but it cannot be a full 360 degrees
-#                    extent = endAngle - startAngle if endAngle - startAngle != 0 else 359.99
-                    extent = endAngle - startAngle if endAngle - startAngle != 0 else 359.99
-# FIXME - a wacky and incorrect way to prevent arc being drawn in the reverse direction
-#          I really need to get cracking on a proper solution...
-#                    if (extent > 190 and extent < 359) or (extent < -190 and extent > -359):
-                    if (extent > 190 or extent < -190) and extent != 359.99:
-#                        print(f"1 BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
-                        if extent < 0:
-                            extent = 360 - extent * -1
+                    # set arc start and end angles
+                    startAngle = math.degrees(math.atan2(startY - centerY, startX - centerX))
+                    endAngle = math.degrees(math.atan2(endY - centerY, endX - centerX))
+                    # keep all angles positive
+                    if startAngle < 0:
+                        startAngle += 360
+                    if endAngle < 0:
+                        endAngle += 360
+                    # CCW arcs
+                    if args[4] > 0:
+                        if startAngle > endAngle:
+                            extent = 360 - (startAngle - endAngle)
                         else:
-                            startAngle = endAngle
-                            extent = 360 - extent
-                        #print(f"      new extent: {extent}")
-#                        if (extent > 180) or (extent < -180):
-#                            print(f"2 BAD{self.count}:   {attr}   {args[:5]}   extent: {extent:.2f}   start{startAngle:.2f}:   end{endAngle:.2f}")
-                    x1 = centerX - radius
-                    y1 = (centerY - radius) * -1
-                    x2 = centerX + radius
-                    y2 = (centerY + radius) * -1
-                    # add new arc to points list
+                            extent = endAngle - startAngle
+                    # CW arcs
+                    else:
+                        if startAngle > endAngle:
+                            extent = -(startAngle - endAngle)# - 360
+                        else:
+                            extent = (endAngle - startAngle) - 360
+                    startAngle = round(startAngle, 4)
+                    endAngle = round(endAngle, 4)
+                    # we use an arc to simulate a circle but it cannot be a full 360 degrees
+                    if extent in (0, 360, -360):
+                        extent = 359.99
+                    # add new arc to points list (invert the y1 and y2 coordinates)
                     self.points.append({'shape': 'arc',
-                                        'x1': x1,
-                                        'y1': y1,
-                                        'x2': x2,
-                                        'y2': y2,
+                                        'x1': centerX - radius,
+                                        'y1': (centerY - radius) * -1,
+                                        'x2': centerX + radius,
+                                        'y2': (centerY + radius) * -1,
                                         'startAngle': startAngle,
                                         'extent': extent,
                                         'lastX': args[0],
@@ -1184,7 +1178,7 @@ class Canon:
                     print(f"arc without a previous move: {args}")
             else: # lines and rapids
                 shape = 'line' if attr == 'straight_feed' else 'rapid'
-                # add point to last line/rapid in  points list
+                # add point to last line/rapid in  points list (invert the endY coordinate)
                 if len(self.points) and self.points[-1]['shape'] == shape:
                     self.points[-1]['points'].append((endX, -endY))
                     self.points[-1]['lastX'] = args[0]
@@ -1198,7 +1192,7 @@ class Canon:
                                     del self.points[-1]['points'][1]
                                 else:
                                     del self.points[-1]['points'][0]
-                # create new line/rapid in points list
+                # create new line/rapid in points list (invert the startY and endY coordinates)
                 self.points.append({'shape': shape,
                                         'points': [(startX, -startY), (endX, -endY)],
                                         'lastX': args[0],
@@ -1244,7 +1238,7 @@ class Window(ctk.CTk):
         super().__init__()
         ctk.set_default_color_theme('dark-blue')
         ctk.set_appearance_mode('dark')
-        self.geometry("1024x768")
+        self.geometry("800x600")
         self.title("Standalone Conversational")
         self.borderColor = '#808080'
         self.grid_rowconfigure(1, weight=1)

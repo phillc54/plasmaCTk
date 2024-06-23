@@ -45,7 +45,7 @@ def preview(self):
             self.xsValue.get(), self.ysValue.get(), \
             kerfWidth, isExternal, \
             self.wValue.get(), self.hValue.get(), self.aValue.get(), \
-            self.rValue.get(), self.rButton.cget('text'))
+            self.rValue.get(), self.rButton.cget('text').upper())
     if error:
         self.dialog_show_ok(_('Gusset Error'), error)
     else:
@@ -59,11 +59,11 @@ def auto_preview(self):
         preview(self)
 
 def radius_button_pressed(self, value):
-    if value.get().split()[0] == _('Radius'):
+    if value == _('Radius'):
         text = _('Chamfer')
     else:
         text = _('Radius')
-    value.set(text)
+    self.rButton.configure(text=text)
     auto_preview(self)
 
 def widgets(self):
@@ -78,7 +78,7 @@ def widgets(self):
     #connections
     self.ctButton.configure(command=lambda:self.cut_type_clicked())
     self.previewC.configure(command=lambda:preview(self))
-    self.rButton.configure(command=lambda:radius_button_pressed(self, self.rbButton.cget('text')))
+    self.rButton.configure(command=lambda:radius_button_pressed(self, self.rButton.cget('text')))
     #add to layout
     self.matLabel.grid(column=0, row=0, padx=3, pady=3, sticky='e')
     self.matCombo.grid(column=1, row=0, padx=3, pady=3, columnspan=3, sticky='ew')
