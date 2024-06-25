@@ -174,6 +174,9 @@ class Conversational():
 #        self.l3Entry.focus()
         self.convFirstRun = False
 
+        if self.standalone:
+            self.new_pressed(False)
+
     def rgb_to_hex(self, r, g, b):
         return f"#{r:02x}{g:02x}{b:02x}"
 
@@ -202,7 +205,7 @@ class Conversational():
         self.canvas.bind('<MouseWheel>', self.on_mousewheel)
         self.canvas.bind('<Button-4>', self.on_mousewheel)
         self.canvas.bind('<Button-5>', self.on_mousewheel)
-        self.canvas.bind('<Configure>', self.resized)
+        self.canvas.bind('<Configure>', self.canvas_resized)
         self.mouseX, self.mouseY = 0, 0
         # if we are in stand-alone mode we need to make a
         # temp file because we cannot use named parameters
@@ -230,10 +233,13 @@ class Conversational():
             return
 #        print(f"\nPLOT {filename}")
         count = 0
-        # origin marker
-#        self.canvas.create_text(-5, -5, text='0,0', fill='red', tags='origin')
-        self.canvas.create_line((0, 0), (10, 0), width=1, fill='green', tags=('origin'))
-        self.canvas.create_line((0, 0), (0, -10), width=1, fill='red', tags=('origin'))
+        # origin text - use ovals and line as text is a PITA to scale
+        # self.canvas.create_oval(-5.5, 4.5, -3.5, .5, width=1, outline='gray90', tags=('origin'))
+        # self.canvas.create_oval(-2.5, 4.5, -0.5, .5, width=1, outline='gray90', tags=('origin'))
+        # self.canvas.create_line((-3, 4), (-3.2, 5), width=1, fill='gray90', tags=('origin'))
+        # origin cross
+        self.canvas.create_line((-2, 0), (10, 0), width=1, fill='red', tags=('origin'))
+        self.canvas.create_line((0, 2), (0, -10), width=1, fill='green', tags=('origin'))
         for point in self.canon.points:
             # arcs
             if point['shape'] == 'arc':
@@ -258,72 +264,89 @@ class Conversational():
         if self.canon.points:
             self.zoom_all()
 
-    def scale_canvas(self, scale):
-        # scale only if conversational is active
-        if self.parent.tabs.get() == 'Conversational':
-#            print(f"w:{self.canvas.winfo_width()}   h:{self.canvas.winfo_height()}")
-            self.canvasScale *= scale
-#            print(f"scale_canvas:{scale:.4f}   total:{self.canvasScale}")
-            self.canvas.scale('all', 0, 0, scale, scale)
-            view, viewC, shape, shapeC, origin = self.get_canvas()
-#            print(f"view:{view} viewC:{viewC} shape:{shape} shapeC:{shapeC} origin:{origin}")
-            diffX = (view[0] - shape[0]) / 2
-            diffY = (view[1] - shape[1]) / 2
-#            print(f"diff:{diffX}x{diffY}")
-            moveX = -origin[0] + diffX
-            moveY = -origin[1] + diffY
-#            print(f"move:{moveX}x{moveY}")
-            self.canvas.move('all', moveX, moveY)
+    def zoom_in(self):
+        # zoom from center of canvas
+        x = self.canvas.winfo_width() / 2
+        y = self.canvas.winfo_height() / 2
+        scale = math.sqrt(2)
+        self.canvas.scale('all', x, y, scale, scale)
 
-    def get_canvas(self):
-#        print('get_canvas')
-        cWidth = self.canvas.winfo_width()
-        cHeight = self.canvas.winfo_height()
-        self.canvasSize = (cWidth, cHeight)
-        cCenter = (cWidth / 2, cHeight / 2)
-        x1, y1, x2, y2 = self.canvas.bbox('all')
-        vWidth = x2 - x1
-        vHeight = y2 - y1
-        vCenter = (vWidth / 2, vHeight / 2)
-#        print(f"canvas:{cWidth}x{cHeight} {cCenter}   view:{vWidth}x{vHeight} {vCenter}   ({x1},{y1})")
-        return self.canvasSize, cCenter, (vWidth, vHeight), vCenter, (x1, y1)
+    def zoom_out(self):
+        # zoom from center of canvas
+        x = self.canvas.winfo_width() / 2
+        y = self.canvas.winfo_height() / 2
+        scale = math.sqrt(0.5)
+        self.canvas.scale('all', x, y, scale, scale)
+
+    def zoom_all(self):
+        # get the scale required for a full view
+        bbox = self.canvas.bbox('all')
+        xScale = (self.canvas.winfo_width() -2) / (bbox[2] - bbox[0])
+        yScale = (self.canvas.winfo_height() -2) / (bbox[3] - bbox[1])
+        scale = min(xScale, yScale)
+        # scale the canvas
+        self.canvas.scale('all', 0, 0, scale, scale)
+        # get view coordinates of bbox center after scaling
+        bbox = self.canvas.bbox('all')
+        xDiff = (self.canvas.winfo_width() - (bbox[2] - bbox[0])) / 2
+        yDiff = (self.canvas.winfo_height() - (bbox[3] - bbox[1])) / 2
+        # get the required move distances
+        xMove = -bbox[0] + xDiff
+        yMove = -bbox[1] + yDiff
+        self.canvas.move('all', xMove, yMove)
+        self.canvasScale = 1
 
     def pan_left(self):
+        # pan left 25% of canvas width
         self.canvas.move('all', self.canvas.winfo_width() * -0.25, 0)
 
     def pan_right(self):
+        # pan right 25% of canvas width
         self.canvas.move('all', self.canvas.winfo_width() * 0.25, 0)
 
     def pan_up(self):
+        # pan up 25% of canvas height
         self.canvas.move('all', 0, self.canvas.winfo_height() * -0.25)
 
     def pan_down(self):
+        # pan down 25% of canvas height
         self.canvas.move('all', 0, self.canvas.winfo_height() * 0.25)
 
-    def zoom_in(self):
-        self.scale_canvas(2)
-
-    def zoom_out(self):
-        self.scale_canvas(0.5)
-
-    def zoom_all(self):
-        x1, y1, x2, y2 = self.canvas.bbox('all')
-        xScale = (self.canvas.winfo_width() * 0.96) / (x2 - x1)
-        yScale = (self.canvas.winfo_height() * 0.96) / (y2 - y1)
-        scale = min(xScale, yScale)
-#        print(f"scale:{scale}")
-        self.scale_canvas(scale)
-        self.canvasScale = 1
-
-    def resized(self, event):
-        if event.width != self.canvasSize[0] or event.height != self.canvasSize[1]:
-            self.canvasSize = (event.width, event.height)
-            self.zoom_all()
+    def canvas_resized(self, event):
+        # get centre of resized canvas
+        x = event.width / 2
+        y = event.height / 2
+        # get the x/y scales to fit the old view to the resized canvas
+        bbox = self.canvas.bbox('all')
+        bWidth = bbox[2] - bbox[0]
+        bHeight = bbox[3] - bbox[1]
+        xScale = event.width / self.canvasSize[0]
+        yScale = event.height / self.canvasSize[1]
+        # try to find the 'best' scale
+#FIXME - not 100% accurate but close enough for the tim being.
+        if bWidth * xScale <= event.width and bHeight * xScale <=  event.height:
+            scale = max(xScale, yScale)
+        elif bWidth * xScale <= event.width:
+            scale = xScale
+        elif bHeight * xScale <= event.height:
+            scale = yScale
+        else:
+            scale = 1
+        # get the difference in center coordinates of the resized and last canvases
+        xDiff = (event.width - self.canvasSize[0]) / 2
+        yDiff = (event.height - self.canvasSize[1]) / 2
+        # scale the canvas
+        self.canvas.scale('all', x, y, scale, scale)
+        # move the view
+        self.canvas.move('all', xDiff, yDiff)
+        # save the new canvas size
+        self.canvasSize = (event.width, event.height)
 
     def on_mouse_left_double(self, event):
-        self.scale_canvas(1 / self.canvasScale)
+        self.zoom_all()
 
     def on_mouse_left_press(self, event):
+        # store coordinates for dragging
         self.mouseX, self.mouseY = event.x, event.y
 
     def on_mouse_drag(self, event):
@@ -344,7 +367,7 @@ class Conversational():
             scale = 1.1
         else:
             scale = 1
-        self.scale_canvas(scale)
+        self.canvas.scale('all', event.x, event.y, scale, scale)
 
     def entry_validation(self):
         self.vcmd = (self.parent.register(self.validate_entries))
