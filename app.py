@@ -51,7 +51,6 @@ class App(ctk.CTk):
             print('\nCannot create hal component\nIs LinuxCNC running?\nRunning in development mode...\n')
             self.comp = {'development': True}
 
-        
         self.borderColor = '#808080'
         self.userButtons = {}
         self.userButtonCodes = {}
@@ -222,6 +221,9 @@ class App(ctk.CTk):
 
         def tab_changed(tab):
             print(f"{tab} is active")
+            if tab == 'Conversational':
+                self.conv.canvas.update()
+                self.conv.zoom_all()
 
         self.tabs = ctk.CTkTabview(self, height=1, anchor='sw', command=lambda: tab_changed(self.tabs.get()))
         self.tabs.add('Main')

@@ -149,7 +149,9 @@ class Conversational():
         self.addC.configure(state = 'disabled')
         self.newC.configure(state = 'normal')
         self.saveC.configure(state = 'disabled')
-        if not self.standalone:
+        if self.standalone:
+            self.sendC.configure(state = 'normal')
+        else:
             self.sendC.configure(state = 'disabled')
         self.settingsC.configure(state = 'normal')
         self.polyCombo.set(self.polyCombo.cget('values')[0])
@@ -209,7 +211,7 @@ class Conversational():
         self.mouseX, self.mouseY = 0, 0
         # if we are in stand-alone mode we need to make a
         # temp file because we cannot use named parameters
-        if self.standalone:
+        if self.standalone or self.parent.comp['development']:
             file = os.path.join(TMPPATH, 'stand-alone.tmp')
             with open(filename, 'r') as inFile:
                 with open(file, 'w') as outFile:
@@ -261,7 +263,7 @@ class Conversational():
             elif point['shape'] == 'rapid' and self.showRapids:
                 self.canvas.create_line(point['points'], width=1, fill='gray60',tags=('shape'))
         self.parent.update()
-        if self.canon.points:
+        if self.canvas.winfo_ismapped():
             self.zoom_all()
 
     def zoom_in(self):
@@ -278,11 +280,11 @@ class Conversational():
         scale = math.sqrt(0.5)
         self.canvas.scale('all', x, y, scale, scale)
 
-    def zoom_all(self):
+    def zoom_all(self, resize=False):
         # get the scale required for a full view
         bbox = self.canvas.bbox('all')
-        xScale = (self.canvas.winfo_width() -2) / (bbox[2] - bbox[0])
-        yScale = (self.canvas.winfo_height() -2) / (bbox[3] - bbox[1])
+        xScale = (self.canvas.winfo_width() - 2) / (bbox[2] - bbox[0])
+        yScale = (self.canvas.winfo_height() - 2) / (bbox[3] - bbox[1])
         scale = min(xScale, yScale)
         # scale the canvas
         self.canvas.scale('all', 0, 0, scale, scale)
@@ -313,30 +315,26 @@ class Conversational():
         self.canvas.move('all', 0, self.canvas.winfo_height() * 0.25)
 
     def canvas_resized(self, event):
-        # get centre of resized canvas
-        x = event.width / 2
-        y = event.height / 2
-        # get the x/y scales to fit the old view to the resized canvas
-        bbox = self.canvas.bbox('all')
-        bWidth = bbox[2] - bbox[0]
-        bHeight = bbox[3] - bbox[1]
+        # don't resize if first tab selection
+        if self.canvasSize == (1, 1):
+            self.canvasSize = (event.width, event.height)
+            return
+        # get the scale of the old canvas to the new canvas
         xScale = event.width / self.canvasSize[0]
         yScale = event.height / self.canvasSize[1]
-        # try to find the 'best' scale
-#FIXME - not 100% accurate but close enough for the tim being.
-        if bWidth * xScale <= event.width and bHeight * xScale <=  event.height:
+        # try to figure a reasonable scale to use
+        # not perfect but good enough fo now
+        if xScale < 1 and yScale < 1:
             scale = max(xScale, yScale)
-        elif bWidth * xScale <= event.width:
-            scale = xScale
-        elif bHeight * xScale <= event.height:
-            scale = yScale
+        elif xScale > 1 and yScale > 1:
+            scale = min(xScale, yScale)
         else:
             scale = 1
-        # get the difference in center coordinates of the resized and last canvases
+        # get the difference in center coordinates of the new canvas and the old canvase
         xDiff = (event.width - self.canvasSize[0]) / 2
         yDiff = (event.height - self.canvasSize[1]) / 2
         # scale the canvas
-        self.canvas.scale('all', x, y, scale, scale)
+        self.canvas.scale('all', event.width / 2, event.height / 2, scale, scale)
         # move the view
         self.canvas.move('all', xDiff, yDiff)
         # save the new canvas size
@@ -513,7 +511,10 @@ class Conversational():
         copy(self.fNgc, self.fNgcBkp)
         self.plot(self.fNgc, title=False)
         self.saveC.configure(state = 'disabled')
-        self.sendC.configure(state = 'disabled')
+        if self.standalone:
+            self.sendC.configure(state = 'normal')
+        else:
+            self.sendC.configure(state = 'disabled')
         self.validShape = False
         self.convLine['xLineStart'] = self.convLine['xLineEnd'] = 0
         self.convLine['yLineStart'] = self.convLine['yLineEnd'] = 0
