@@ -6,11 +6,25 @@ import linuxcnc
 import hal
 import customtkinter as ctk
 from customtkinter import filedialog
+import configparser
 
+try:
+    INI = linuxcnc.ini(sys.argv[2])
+except:
+    print('\nERROR:\ncannot find linuxcnc ini file')
+    sys.exit()
 APPDIR = os.path.dirname(os.path.realpath(__file__))
+IMGPATH = os.path.join(APPDIR, 'lib/images')
+TMPPATH = '/tmp/plasmactk'
+PREFS = configparser.ConfigParser()
+PREFSDIR = os.path.dirname(sys.argv[2])
+
+if not os.path.isdir(TMPPATH):
+    os.mkdir(TMPPATH)
 sys.path.append(os.path.join(APPDIR, 'lib'))
-print(f"   CWD: {os.getcwd()}")
-print(f"APPDIR: {APPDIR}")
+
+#print(f"   CWD: {os.getcwd()}")
+#print(f"APPDIR: {APPDIR}")
 #configPath = os.getcwd()
 #p2Path = os.path.join(configPath, 'plasmac2')
 #if os.path.isdir(os.path.join(p2Path, 'lib')):
@@ -18,13 +32,9 @@ print(f"APPDIR: {APPDIR}")
 #    import sys
 #    libPath = os.path.join(p2Path, 'lib')
 #    sys.path.append(libPath)
+
 import conversational
 
-IMGPATH = os.path.join(APPDIR, 'lib/images')
-INI = os.path.join(os.path.expanduser('~'), 'linuxcnc/configs/0_ctk_metric/metric.ini')
-TMPPATH = '/tmp/plasmactk'
-if not os.path.isdir(TMPPATH):
-    os.mkdir(TMPPATH)
 
 class App(ctk.CTk):
     ''' the application'''
@@ -42,8 +52,7 @@ class App(ctk.CTk):
         try:
             self.comp = hal.component('plasmactk-ui')
             self.create_hal_pins(self.comp)
-            self.comp.ready()
-            self.S.poll()
+            # self.S.poll()
 #FIXME   this is just for testing purposes and needs to be removed when completed
             hal.set_p('plasmac.cut-feed-rate', '1')
         except:
@@ -58,6 +67,7 @@ class App(ctk.CTk):
         self.borderColor = blah.cget('border_color')
         self.textColor = blah.cget('text_color')
         self.disabledColor = blah.cget('text_color_disabled')
+
         self.userButtons = {}
         self.userButtonCodes = {}
         self.fileLoaded = None
@@ -66,6 +76,16 @@ class App(ctk.CTk):
         self.defaultExtension = '.ngc'
         # create the gui
         self.create_gui()
+        self.comp.ready()
+        self.machine = INI.find('EMC', 'MACHINE') or None
+        if not self.machine:
+            print('FUKT')
+            sys.exit()
+        PREFS.read(os.path.join(PREFSDIR, f"{self.machine}.prefs"))
+        self.parameter_reload()
+
+        self.tmp1 = None
+
         self.after(100, self.periodic)
 
 
@@ -183,6 +203,12 @@ class App(ctk.CTk):
     def periodic(self):
         #print('+100mS')
 
+        # bob = hal.get_value('plasmactk-ui.arc-fail-delay')
+        # if bob != self.tmp1:
+        #     self.tmp1 = bob
+        #     print(f"pin changed to {bob}")
+
+
         self.after(100, self.periodic)
 
 ##############################################################################
@@ -196,6 +222,19 @@ class App(ctk.CTk):
 
     def parameter_reload(self):
         print('load parameters')
+
+        self.startFailBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Fail Timeout'))
+        self.maxStartsBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Maximum Starts'))
+
+        self.floatTravelBox.set(PREFS.get('PLASMA_PARAMETERS', 'Float Switch Travel'))
+        self.probeSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Probe Feed Rate'))
+
+        if PREFS.get('ENABLE_OPTIONS', 'THC auto') == 'True':
+            self.thcAutoCheck.select()
+        else:
+            self.thcAutoCheck.deselect()
+        self.thcDelayBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Delay'))
+        self.thcCountsBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Counts'))
 
 ##############################################################################
 # gui build
@@ -366,7 +405,7 @@ class App(ctk.CTk):
         arcLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
         startFailLabel = ctk.CTkLabel(params1, text='Start Fail Timer')
         startFailLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.startFailBox = MySpinbox(params1, decimals=1, min_value=0.1, max_value=60, step_size=0.1)
+        self.startFailBox = MySpinbox(params1, decimals=1, min_value=0.1, max_value=60, step_size=0.1, pin_name='arc-fail-delay')
         self.startFailBox.grid(row=1, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
         maxStartsLabel = ctk.CTkLabel(params1, text='Max Starts')
         maxStartsLabel.grid(row=2, column=0, padx=(3,1), pady=(3,0), sticky='nse')
@@ -456,7 +495,7 @@ class App(ctk.CTk):
 class MySpinbox(ctk.CTkFrame):
     ''' this is a hack of the tutorial from 
         https://customtkinter.tomschimansky.com/tutorial/spinbox '''
-    def __init__(self, 
+    def __init__(self,
                  master,
                  width=100,
                  height=30,
@@ -467,6 +506,7 @@ class MySpinbox(ctk.CTkFrame):
                  step_size=1,
                  wrap=True,
                  justify='right',
+                 pin_name = None,
                  command=None):
         super().__init__(master)
         self.decimals = decimals
@@ -476,6 +516,7 @@ class MySpinbox(ctk.CTkFrame):
         self.max_value = self.num_type(max_value)
         self.step_size = self.num_type(step_size)
         self.wrap = wrap
+        self.pin_name = pin_name
         self.command = command
 #        self.configure(fg_color=('gray78', 'gray28'))  # set frame color
         self.grid_rowconfigure(0, weight=1)
@@ -485,6 +526,7 @@ class MySpinbox(ctk.CTkFrame):
         self.dec_button.grid(row=0, column=0, padx=(3, 0), pady=3, sticky='nsew')
         self.entry = ctk.CTkEntry(self, width=width - (2 * height), height=height - 6, border_width=0, justify=justify)
         self.entry.grid(row=0, column=1, columnspan=1, padx=3, pady=3, sticky='nsew')
+        self.entry.bind('<KeyRelease>', self.entry_changed)
         self.inc_button = ctk.CTkButton(self, text='+', width=height - 6, height=height - 6, command=lambda:self.spin(1))
         self.inc_button.grid(row=0, column=2, padx=(0, 3), pady=3, sticky='nsew')
         # default value
@@ -494,7 +536,32 @@ class MySpinbox(ctk.CTkFrame):
             value = self.max_value
         else:
             value = self.start_value
-        self.entry.insert(0, f"{value:.{self.decimals}f}")
+        text = f"{value:.{self.decimals}f}"
+        self.entry.insert(0, text)
+        if pin_name:
+            num = hal.HAL_S32 if not decimals else hal.HAL_FLOAT
+            self.winfo_toplevel().comp.newpin(pin_name, num, hal.HAL_OUT)
+            self.winfo_toplevel().comp[pin_name] = text
+
+    def entry_changed(self, event):
+        try:
+            x = False
+            value = self.num_type(self.entry.get())
+            if value < self.min_value:
+                value = self.min_value
+                x = True
+            elif value > self.max_value:
+                value = self.max_value
+                x = True
+            text = f"{value:.{self.decimals}f}"
+            if x:
+                self.set(value)
+            if self.pin_name:
+                self.winfo_toplevel().comp[self.pin_name] = text
+        except ValueError:
+            return
+        except TypeError:
+            return
 
     def spin(self, direction):
         if self.command is not None:
@@ -512,7 +579,10 @@ class MySpinbox(ctk.CTkFrame):
                 else:
                     value = self.max_value
             self.entry.delete(0, 'end')
-            self.entry.insert(0, f"{value:.{self.decimals}f}")
+            text = f"{value:.{self.decimals}f}"
+            self.entry.insert(0, text)
+            if self.pin_name:
+                self.winfo_toplevel().comp[self.pin_name] = text
         except ValueError:
             return
 
@@ -524,7 +594,11 @@ class MySpinbox(ctk.CTkFrame):
 
     def set(self, value):
         self.entry.delete(0, 'end')
-        self.entry.insert(0, f"{value:.{self.decimals}f}")
+        text = f"{float(value):.{self.decimals}f}"
+        self.entry.insert(0, text)
+        if self.pin_name:
+            self.winfo_toplevel().comp[self.pin_name] = text
+
 
 
 app = App()
