@@ -34,7 +34,6 @@ class App(ctk.CTk):
         ctk.set_appearance_mode('dark')  # Modes: system (default), light, dark
         self.title('Phill\'s UI Test')
         self.geometry(f'{800}x{600}+{200}+{200}')
-        self.after(100, self.periodic)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.C = linuxcnc.command()
@@ -51,7 +50,14 @@ class App(ctk.CTk):
             print('\nCannot create hal component\nIs LinuxCNC running?\nRunning in development mode...\n')
             self.comp = {'development': True}
 
-        self.borderColor = '#808080'
+        # dummy button to get some colors
+        blah = ctk.CTkButton(self)
+        self.buttonOffColor = blah.cget('fg_color')
+        self.buttonOnColor = blah.cget('hover_color')
+        self.backgroundColor = blah.cget('bg_color')
+        self.borderColor = blah.cget('border_color')
+        self.textColor = blah.cget('text_color')
+        self.disabledColor = blah.cget('text_color_disabled')
         self.userButtons = {}
         self.userButtonCodes = {}
         self.fileLoaded = None
@@ -60,6 +66,7 @@ class App(ctk.CTk):
         self.defaultExtension = '.ngc'
         # create the gui
         self.create_gui()
+        self.after(100, self.periodic)
 
 
 ##############################################################################
@@ -184,6 +191,12 @@ class App(ctk.CTk):
     # def rgb_to_hex(self, r, g, b):
     #     return f'#{r:02x}{g:02x}{b:02x}'
 
+    def parameter_save(self):
+        print('save parameters')
+
+    def parameter_reload(self):
+        print('load parameters')
+
 ##############################################################################
 # gui build
 ##############################################################################
@@ -209,6 +222,7 @@ class App(ctk.CTk):
         self.create_parameters_1_frame()
         self.create_parameters_2_frame()
         self.create_parameters_3_frame()
+        self.create_parameters_buttons()
         self.create_settings_1_frame()
         self.create_settings_2_frame()
         self.create_settings_3_frame()
@@ -249,9 +263,9 @@ class App(ctk.CTk):
     def create_main_button_frame(self):
         ''' main tab button frame '''
         self.mainButtons = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor, width=146)
-        self.mainButtons.grid(row=0, column=0, rowspan=2, padx=1, pady = 1, sticky='nsew')
+        self.mainButtons.grid(row=0, column=0, rowspan=2, padx=1, pady=1, sticky='nsew')
         self.mainButtons.grid_rowconfigure((1, 2), weight=1)
-        self.mainButtonLbl = ctk.CTkLabel(self.mainButtons, text='Button Panel', height=16, anchor='n')#, fg_color='gray', corner_radius=1, height=18, text_color='#404040')
+        self.mainButtonLbl = ctk.CTkLabel(self.mainButtons, text='Button Panel', height=16, anchor='n')
         self.mainButtonLbl.grid(row=0, column=0, padx=4, pady=(1, 0), sticky='new')
         self.mainButtonFrame = ctk.CTkScrollableFrame(self.mainButtons, width=144, fg_color='transparent')
         self.mainButtonFrame.grid(row=1, column=0, rowspan=2, padx=2, pady=(0, 2), sticky='nsew')
@@ -262,11 +276,11 @@ class App(ctk.CTk):
     def create_main_control_frame(self):
         ''' main tab control frame '''
         self.mainControl = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.mainControl.grid(row=0, column=1, padx=1, pady = 1, sticky='nsew')
+        self.mainControl.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
         self.mainControl.grid_rowconfigure((1, 2, 3, 4), weight=6)
         self.mainControl.grid_rowconfigure((5, 6, 7), weight=1)
         self.mainControl.grid_columnconfigure((0, 1, 2, 3), weight=1)
-        self.mainControlLbl = ctk.CTkLabel(self.mainControl, text='Cycle Panel', height=16, anchor='n')#, fg_color='gray', corner_radius=1, height=18, text_color='#404040')
+        self.mainControlLbl = ctk.CTkLabel(self.mainControl, text='Cycle Panel', height=16, anchor='n')
         self.mainControlLbl.grid(row=0, column=0, columnspan=4, padx=4, pady=(1, 0), sticky='new')
         self.cycleStart = ctk.CTkButton(self.mainControl, text='Cycle Start', command = self.run_clicked)
         self.cycleStart.grid(row=1, column=0, rowspan=2, columnspan=2, padx=(3, 1), pady=(3,0), sticky='nsew')
@@ -298,7 +312,7 @@ class App(ctk.CTk):
     def create_main_1_frame(self):
         ''' main tab ??? frame '''
         self.main1Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main1Frame.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
+        self.main1Frame.grid(row=1, column=1, padx=1, pady=1, sticky='nsew')
 
         self.open = ctk.CTkButton(self.main1Frame, text='Open', command=self.open_clicked)
         self.open.grid(row=0, column=0, padx=(3,1), pady=(3,0), sticky='nsew')
@@ -306,103 +320,212 @@ class App(ctk.CTk):
     def create_main_2_frame(self):
         ''' main tab ??? frame '''
         self.main2Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main2Frame.grid(row=0, column=2, padx=1, pady = 1, sticky='nsew')
+        self.main2Frame.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
 
     def create_main_3_frame(self):
         ''' main tab ??? frame '''
         self.main3Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main3Frame.grid(row=1, column=2, padx=1, pady = 1, sticky='nsew')
+        self.main3Frame.grid(row=1, column=2, padx=1, pady=1, sticky='nsew')
 
     def create_main_4_frame(self):
         ''' main tab ??? frame '''
         self.main4Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main4Frame.grid(row=0, column=3, padx=1, pady = 1, sticky='nsew')
+        self.main4Frame.grid(row=0, column=3, padx=1, pady=1, sticky='nsew')
 
     def create_main_5_frame(self):
         ''' main tab ??? frame '''
         self.main5Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main5Frame.grid(row=1, column=3, padx=1, pady = 1, sticky='nsew')
+        self.main5Frame.grid(row=1, column=3, padx=1, pady=1, sticky='nsew')
 
     def create_conversational_toolbar_frame(self):
         ''' conversational button frame '''
         self.convTools = ctk.CTkFrame(self.tabs.tab('Conversational'), border_width=1, border_color=self.borderColor, height=40)
-        self.convTools.grid(row=0, column=0, columnspan=2, padx=1, pady = 1, sticky='nsew')
+        self.convTools.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
     def create_conversational_input_frame(self):
         ''' conversational input frame '''
         self.convInput = ctk.CTkFrame(self.tabs.tab('Conversational'), border_width=1, border_color=self.borderColor, width=120)
-        self.convInput.grid(row=1, column=0, padx=1, pady = 1, sticky='nsew')
+        self.convInput.grid(row=1, column=0, padx=1, pady=1, sticky='nsew')
         self.convInput.grid_rowconfigure(10, weight=1)
 
     def create_conversational_preview_frame(self):
         ''' conversational preview frame '''
         self.convPreview = ctk.CTkFrame(self.tabs.tab('Conversational'), border_width=1, border_color=self.borderColor)
-        self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
+        self.convPreview.grid(row=1, column=1, padx=1, pady=1, sticky='nsew')
         self.convPreview.grid_rowconfigure(0, weight=1)
         self.convPreview.grid_columnconfigure(1, weight=1)
 
     def create_parameters_1_frame(self):
         ''' parameters ??? frame '''
-        self.parameters1 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        self.parameters1.grid(row=0, column=0, padx=1, pady = 1, sticky='nsew')
+        params1 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params1.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
+        params1.grid_rowconfigure((1,2,3,4,5,6), weight=1)
+        params1.grid_rowconfigure((20), weight=50)
+        params1.grid_columnconfigure(1, weight=1)
+        arcLabel = ctk.CTkLabel(params1, text='Arc:')
+        arcLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        startFailLabel = ctk.CTkLabel(params1, text='Start Fail Timer')
+        startFailLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.startFailBox = MySpinbox(params1, decimals=1, min_value=0.1, max_value=60, step_size=0.1)
+        self.startFailBox.grid(row=1, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        maxStartsLabel = ctk.CTkLabel(params1, text='Max Starts')
+        maxStartsLabel.grid(row=2, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.maxStartsBox = MySpinbox(params1, decimals=0, min_value=1, max_value=5)
+        self.maxStartsBox.grid(row=2, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
 
     def create_parameters_2_frame(self):
         ''' parameters ??? frame '''
-        self.parameters2 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        self.parameters2.grid(row=0, column=1, padx=1, pady = 1, sticky='nsew')
+        params2 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params2.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
+        params2.grid_rowconfigure((1,2,3,4,5,6), weight=1)
+        params2.grid_rowconfigure((20), weight=50)
+        params2.grid_columnconfigure(1, weight=1)
+        probeLabel = ctk.CTkLabel(params2, text='Probing:')
+        probeLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        floatTravelLabel = ctk.CTkLabel(params2, text='Float Travel')
+        floatTravelLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.floatTravelBox = MySpinbox(params2, min_value=-25, max_value=25, step_size=0.01)
+        self.floatTravelBox.grid(row=1, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        probeSpeedLabel = ctk.CTkLabel(params2, text='Probe Speed')
+        probeSpeedLabel.grid(row=2, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.probeSpeedBox = MySpinbox(params2, decimals=0)
+        self.probeSpeedBox.grid(row=2, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_3_frame(self):
         ''' parameters ??? frame '''
-        self.parameters3 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        self.parameters3.grid(row=0, column=2, padx=1, pady = 1, sticky='nsew')
+        params3 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params3.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
+        params3.grid_rowconfigure((1,2,3,4,5,6), weight=1)
+        params3.grid_rowconfigure((20), weight=50)
+        params3.grid_columnconfigure(1, weight=1)
+        thcLabel = ctk.CTkLabel(params3, text='THC:')
+        thcLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        thcAutoLabel = ctk.CTkLabel(params3, text='Auto Activate')
+        thcAutoLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcAutoCheck = ctk.CTkCheckBox(params3, text='', border_width=1)
+        self.thcAutoCheck.grid(row=1, column=1, padx=(3,3), pady=(1,0), sticky='nsw')
+        thcDelayLabel = ctk.CTkLabel(params3, text='Start Delay')
+        thcDelayLabel.grid(row=2, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcDelayBox = MySpinbox(params3, max_value=9, step_size=0.01)
+        self.thcDelayBox.grid(row=2, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcCountsLabel = ctk.CTkLabel(params3, text='Sample Counts')
+        thcCountsLabel.grid(row=3, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcCountsBox = MySpinbox(params3, decimals=0, max_value=1000)
+        self.thcCountsBox.grid(row=3, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+
+    def create_parameters_buttons(self):
+        ''' parameters buttons'''
+        paramButtons = ctk.CTkFrame(self.tabs.tab('Parameters'))#, border_width=1, border_color=self.borderColor)
+        paramButtons.grid(row=1, column=0, columnspan=3, padx=1, pady=(3,0), sticky='nsew')
+        paramButtons.grid_columnconfigure((0,3), weight=1)
+        paramSave = ctk.CTkButton(paramButtons, text='Save', command=self.parameter_save)
+        paramSave.grid(row=0, column=1, padx=3)
+        paramLoad = ctk.CTkButton(paramButtons, text='Reload', command=self.parameter_reload)
+        paramLoad.grid(row=0, column=2, padx=3)
 
     def create_settings_1_frame(self):
         ''' settings ??? frame '''
         self.settings1 = ctk.CTkFrame(self.tabs.tab('Settings'), border_width=1, border_color=self.borderColor)
-        self.settings1.grid(row=0, column=0, padx=1, pady = 1, sticky='nsew')
+        self.settings1.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
 
     def create_settings_2_frame(self):
         ''' settings ??? frame '''
         self.settings2 = ctk.CTkFrame(self.tabs.tab('Settings'), border_width=1, border_color=self.borderColor)
-        self.settings2.grid(row=0, column=1, padx=1, pady = 1, sticky='nsew')
+        self.settings2.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
 
     def create_settings_3_frame(self):
         ''' settings ??? frame '''
         self.settings3 = ctk.CTkFrame(self.tabs.tab('Settings'), border_width=1, border_color=self.borderColor)
-        self.settings3.grid(row=0, column=2, padx=1, pady = 1, sticky='nsew')
+        self.settings3.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
 
     def create_status_1_frame(self):
         ''' status ??? frame '''
         self.status1 = ctk.CTkFrame(self.tabs.tab('Status'), border_width=1, border_color=self.borderColor)
-        self.status1.grid(row=0, column=0, padx=1, pady = 1, sticky='nsew')
+        self.status1.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
 
     def create_status_2_frame(self):
         ''' status ??? frame '''
         self.status2 = ctk.CTkFrame(self.tabs.tab('Status'), border_width=1, border_color=self.borderColor)
-        self.status2.grid(row=0, column=1, padx=1, pady = 1, sticky='nsew')
+        self.status2.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
 
     def create_status_3_frame(self):
         ''' status ??? frame '''
         self.status3 = ctk.CTkFrame(self.tabs.tab('Status'), border_width=1, border_color=self.borderColor)
-        self.status3.grid(row=0, column=2, padx=1, pady = 1, sticky='nsew')
+        self.status3.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
 
-class hSeparator(ctk.CTkFrame):
-    ''' horizontal separator '''
-    def __init__(self, *args,
-                 width: int = 120,
-                 height: int = 2,
-                 fg_color: str = '#808080',
-                 **kwargs):
-        super().__init__(*args, width=width, height=height, fg_color=fg_color, **kwargs)
+class MySpinbox(ctk.CTkFrame):
+    ''' this is a hack of the tutorial from 
+        https://customtkinter.tomschimansky.com/tutorial/spinbox '''
+    def __init__(self, 
+                 master,
+                 width=100,
+                 height=30,
+                 decimals=2,
+                 start_value=0,
+                 min_value=0,
+                 max_value=100,
+                 step_size=1,
+                 wrap=True,
+                 justify='right',
+                 command=None):
+        super().__init__(master)
+        self.decimals = decimals
+        self.num_type = int if not decimals else float
+        self.start_value = self.num_type(start_value)
+        self.min_value = self.num_type(min_value)
+        self.max_value = self.num_type(max_value)
+        self.step_size = self.num_type(step_size)
+        self.wrap = wrap
+        self.command = command
+#        self.configure(fg_color=('gray78', 'gray28'))  # set frame color
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure((0, 2), weight=1)
+        self.grid_columnconfigure(1, weight=2)
+        self.dec_button = ctk.CTkButton(self, text='-', width=height - 6, height=height - 6, command=lambda:self.spin(-1))
+        self.dec_button.grid(row=0, column=0, padx=(3, 0), pady=3, sticky='nsew')
+        self.entry = ctk.CTkEntry(self, width=width - (2 * height), height=height - 6, border_width=0, justify=justify)
+        self.entry.grid(row=0, column=1, columnspan=1, padx=3, pady=3, sticky='nsew')
+        self.inc_button = ctk.CTkButton(self, text='+', width=height - 6, height=height - 6, command=lambda:self.spin(1))
+        self.inc_button.grid(row=0, column=2, padx=(0, 3), pady=3, sticky='nsew')
+        # default value
+        if self.start_value < self.min_value:
+            value = self.min_value
+        elif start_value > self.max_value:
+            value = self.max_value
+        else:
+            value = self.start_value
+        self.entry.insert(0, f"{value:.{self.decimals}f}")
 
-class vSeparator(ctk.CTkFrame):
-    ''' horizontal separator '''
-    def __init__(self, *args,
-                 width: int = 2,
-                 height: int = 120,
-                 fg_color: str = '#808080',
-                 **kwargs):
-        super().__init__(*args, width=width, height=height, fg_color=fg_color, **kwargs)
+    def spin(self, direction):
+        if self.command is not None:
+            self.command()
+        try:
+            value = self.num_type(self.entry.get()) + (self.step_size * direction)
+            if value < self.min_value:
+                if self.wrap:
+                    value = self.max_value
+                else:
+                    value = self.min_value
+            elif value > self.max_value:
+                if self.wrap:
+                    value = self.min_value
+                else:
+                    value = self.max_value
+            self.entry.delete(0, 'end')
+            self.entry.insert(0, f"{value:.{self.decimals}f}")
+        except ValueError:
+            return
+
+    def get(self):
+        try:
+            return self.num_type(self.entry.get())
+        except ValueError:
+            return None
+
+    def set(self, value):
+        self.entry.delete(0, 'end')
+        self.entry.insert(0, f"{value:.{self.decimals}f}")
+
 
 app = App()
 app.mainloop()

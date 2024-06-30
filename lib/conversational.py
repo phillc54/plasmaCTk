@@ -136,8 +136,6 @@ class Conversational():
         self.canon = Canon()
         parameter = os.path.join(TMPPATH, 'parameters')
         self.canon.parameter_file = parameter
-        self.buttonOnColor = self.spButton.cget('hover_color')
-        self.buttonOffColor = self.spButton.cget('fg_color')
         self.bgColor = self.parent.cget('background')
         self.g5xIndex = 1 # do we need this without a real preview ???
         self.previewActive = False
@@ -176,7 +174,7 @@ class Conversational():
 #        self.l3Entry.focus()
         self.convFirstRun = False
 
-        if self.standalone:
+        if self.standalone or not self.parent.fileLoaded:
             self.new_pressed(False)
 
     def rgb_to_hex(self, r, g, b):
@@ -199,7 +197,7 @@ class Conversational():
     def plot(self, filename, title=True):
         if len(self.parent.convPreview.winfo_children()) > 1:
             self.canvas.destroy()
-        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.bgColor, highlightthickness=0)
+        self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.parent.backgroundColor[1], highlightthickness=0)
         self.canvas.grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
         self.canvas.bind('<Double-Button-1>', self.on_mouse_left_double)
         self.canvas.bind('<ButtonPress-1>', self.on_mouse_left_press)
@@ -647,8 +645,8 @@ class Conversational():
             reload(self.module)
         self.oldConvButton = self.convButton
         self.convButton = shape
-        self.toolButton[self.convShapes.index(self.oldConvButton)].configure(state='enabled', fg_color=self.buttonOffColor)
-        self.toolButton[self.convShapes.index(self.convButton)].configure(state='disabled', fg_color=self.buttonOnColor)
+        self.toolButton[self.convShapes.index(self.oldConvButton)].configure(state='enabled', fg_color=self.parent.buttonOffColor)
+        self.toolButton[self.convShapes.index(self.convButton)].configure(state='disabled', fg_color=self.parent.buttonOnColor)
         self.settingsC.configure(state = 'normal')
         self.previewC.configure(state = 'normal')
         self.loLabel.configure(state = 'normal')
@@ -657,7 +655,6 @@ class Conversational():
             self.undoC.configure(state = 'normal')
         self.addC.configure(state = 'disabled')
         self.clear_widgets()
-        self.ocButton.configure(fg_color = self.bBackColor)#relief='raised', bg=self.bBackColor)
         if self.settingsExited:
             self.liValue.set(self.savedSettings['lead_in'])
             self.loValue.set(self.savedSettings['lead_out'])
@@ -1048,9 +1045,7 @@ class Conversational():
         self.sendC = ctk.CTkButton(self.parent.convInput, width=width, text=_('Send'))
         # spacer and separator
         self.spacer = ctk.CTkLabel(self.parent.convInput, text='')
-        self.sepline = ctk.CTkFrame(self.parent.convInput, width = 120, height = 2, fg_color = '#808080')
-        # get default background color
-        self.bBackColor = self.sendC.cget('fg_color')
+        self.sepline = ctk.CTkFrame(self.parent.convInput, width = 120, height = 2, fg_color = self.parent.borderColor)
         # create lists of entries
         self.uInts   = [self.hoEntry, self.sEntry, self.pEntry, self.cnEntry, self.rnEntry]
         self.sFloats = [self.xsEntry, self.ysEntry, self.aEntry, self.caEntry, \
@@ -1264,7 +1259,15 @@ class Window(ctk.CTk):
         ctk.set_appearance_mode('dark')
         self.geometry("800x600")
         self.title("Standalone Conversational")
-        self.borderColor = '#808080'
+
+        # dummy button to get some colors
+        blah = ctk.CTkButton(self)
+        self.buttonOffColor = blah.cget('fg_color')
+        self.buttonOnColor = blah.cget('hover_color')
+        self.backgroundColor = blah.cget('bg_color')
+        self.borderColor = blah.cget('border_color')
+        self.textColor = blah.cget('text_color')
+        self.disabledColor = blah.cget('text_color_disabled')
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(1, weight=1)
         self.convTools = ctk.CTkFrame(self, border_width=1, border_color=self.borderColor, height=40)
