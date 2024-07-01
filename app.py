@@ -42,7 +42,7 @@ class App(ctk.CTk):
         super().__init__()
         ctk.set_default_color_theme('dark-blue')  # Themes: blue (default), dark-blue, green
         ctk.set_appearance_mode('dark')  # Modes: system (default), light, dark
-        self.title('Phill\'s UI Test')
+        self.title('plasma-ctk')
         self.geometry(f'{800}x{600}+{200}+{200}')
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -222,19 +222,45 @@ class App(ctk.CTk):
 
     def parameter_reload(self):
         print('load parameters')
-
+        # parameter column 1
         self.startFailBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Fail Timeout'))
         self.maxStartsBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Maximum Starts'))
-
+        self.retryDelayBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Restart Delay'))
+        self.voltageScaleBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Voltage Scale'))
+        self.voltageOffsetBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Voltage Offset'))
+        self.heightPerVoltBox.set(PREFS.get('PLASMA_PARAMETERS', 'Height Per Volt'))
+        self.okHighBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc OK High'))
+        self.okLowBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc OK Low'))
+        self.xPierceBox.set(PREFS.get('PLASMA_PARAMETERS', 'X Pierce Offset'))
+        self.yPierceBox.set(PREFS.get('PLASMA_PARAMETERS', 'Y Pierce Offset'))
+        # parameter column 2
         self.floatTravelBox.set(PREFS.get('PLASMA_PARAMETERS', 'Float Switch Travel'))
         self.probeSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Probe Feed Rate'))
-
+        self.probeHeightBox.set(PREFS.get('PLASMA_PARAMETERS', 'Probe Start Height'))
+        self.ohmicOffsetBox.set(PREFS.get('PLASMA_PARAMETERS', 'Ohmic Probe Offset'))
+        self.ohmicRetriesBox.set(PREFS.get('PLASMA_PARAMETERS', 'Ohmic Maximum Attempts'))
+        self.skipIhsBox.set(PREFS.get('PLASMA_PARAMETERS', 'Skip IHS Distance'))
+        self.offsetSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Offset Feed Rate'))
+        self.scribeArmBox.set(PREFS.get('PLASMA_PARAMETERS', 'Scribe Arming Delay'))
+        self.scribeOnBox.set(PREFS.get('PLASMA_PARAMETERS', 'Scribe On Delay'))
+        self.spotThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'Spotting Threshold'))
+        self.spotTimeBox.set(PREFS.get('PLASMA_PARAMETERS', 'Spotting Time'))
+        # parameter column 3
         if PREFS.get('ENABLE_OPTIONS', 'THC auto') == 'True':
             self.thcAutoCheck.select()
         else:
             self.thcAutoCheck.deselect()
         self.thcDelayBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Delay'))
-        self.thcCountsBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Counts'))
+        self.thcSampleCountsBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Counts'))
+        self.thcSampleThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Threshold'))
+        self.thcThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Threshold'))
+        self.thcSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid P Gain'))
+        self.thcVADthresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'Velocity Anti Dive Threshold'))
+        self.thcVoidSlopeBox.set(PREFS.get('PLASMA_PARAMETERS', 'Void Sense Slope'))
+        self.thcPidIBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid I Gain'))
+        self.thcPidDBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid D Gain'))
+        self.safeHeightBox.set(PREFS.get('PLASMA_PARAMETERS', 'Safe Height'))
+        self.setupSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Setup Feed Rate'))
 
 ##############################################################################
 # gui build
@@ -396,61 +422,173 @@ class App(ctk.CTk):
 
     def create_parameters_1_frame(self):
         ''' parameters ??? frame '''
-        params1 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        params1.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
-        params1.grid_rowconfigure((1,2,3,4,5,6), weight=1)
-        params1.grid_rowconfigure((20), weight=50)
-        params1.grid_columnconfigure(1, weight=1)
-        arcLabel = ctk.CTkLabel(params1, text='Arc:')
+        params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
+        params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10,11), weight=1)
+        params.grid_rowconfigure((20), weight=50)
+        params.grid_columnconfigure(1, weight=1)
+        arcLabel = ctk.CTkLabel(params, text='ARC:')
         arcLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
-        startFailLabel = ctk.CTkLabel(params1, text='Start Fail Timer')
+        startFailLabel = ctk.CTkLabel(params, text='Start Fail Timer')
         startFailLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.startFailBox = MySpinbox(params1, decimals=1, min_value=0.1, max_value=60, step_size=0.1, pin_name='arc-fail-delay')
+        self.startFailBox = HalSpinBox(params, min_value=0.1, max_value=60, decimals=1, step_size=0.1, pin_name='arc-fail-delay')
         self.startFailBox.grid(row=1, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
-        maxStartsLabel = ctk.CTkLabel(params1, text='Max Starts')
+        maxStartsLabel = ctk.CTkLabel(params, text='Max Starts')
         maxStartsLabel.grid(row=2, column=0, padx=(3,1), pady=(3,0), sticky='nse')
-        self.maxStartsBox = MySpinbox(params1, decimals=0, min_value=1, max_value=5)
+        self.maxStartsBox = HalSpinBox(params, min_value=1, max_value=5, pin_name='arc-max-starts')
         self.maxStartsBox.grid(row=2, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        retryDelayLabel = ctk.CTkLabel(params, text='Retry Delay')
+        retryDelayLabel.grid(row=3, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.retryDelayBox = HalSpinBox(params, min_value=1, max_value=60, pin_name='restart-delay')
+        self.retryDelayBox.grid(row=3, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        voltageScaleLabel = ctk.CTkLabel(params, text='Voltage Scale')
+        voltageScaleLabel.grid(row=4, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.voltageScaleBox = HalSpinBox(params, min_value=-9999, max_value=9999, decimals=6, step_size=0.000001, pin_name='arc-voltage-scale')
+        self.voltageScaleBox.grid(row=4, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        voltageOffsetLabel = ctk.CTkLabel(params, text='Voltage Offset')
+        voltageOffsetLabel.grid(row=5, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.voltageOffsetBox = HalSpinBox(params, min_value=-999999, max_value=999999, decimals=3, step_size=0.001, pin_name='arc-voltage-offset')
+        self.voltageOffsetBox.grid(row=5, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        heightPerVoltLabel = ctk.CTkLabel(params, text='Height per Volt')
+        heightPerVoltLabel.grid(row=6, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.heightPerVoltBox = HalSpinBox(params, min_value=0.025, max_value=0.25, decimals=3, step_size=0.001, pin_name='height-per-volt')
+        self.heightPerVoltBox.grid(row=6, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        okHighLabel = ctk.CTkLabel(params, text='OK High Volts')
+        okHighLabel.grid(row=7, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.okHighBox = HalSpinBox(params, max_value=99999, pin_name='arc-ok-high')
+        self.okHighBox.grid(row=7, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        okLowLabel = ctk.CTkLabel(params, text='OK Low Volts')
+        okLowLabel.grid(row=8, column=0, padx=(3,1), pady=(3,0), sticky='nse')
+        self.okLowBox = HalSpinBox(params, pin_name='arc-ok-low')
+        self.okLowBox.grid(row=8, column=1, padx=(1,3), pady=(3,0), sticky='nsew')
+        pierceLabel = ctk.CTkLabel(params, text='PIERCE ONLY:')
+        pierceLabel.grid(row=9, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        xPierceLabel = ctk.CTkLabel(params, text='Threshold Volts')
+        xPierceLabel.grid(row=10, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.xPierceBox = HalSpinBox(params, min_value=-5, max_value=5, decimals=1, step_size=0.1, pin_name='x_pierce_offset')
+        self.xPierceBox.grid(row=10, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        yPierceLabel = ctk.CTkLabel(params, text='Time On (mS)')
+        yPierceLabel.grid(row=11, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.yPierceBox = HalSpinBox(params, min_value=-5, max_value=5, decimals=1, step_size=0.1, pin_name='y_pierce_offset')
+        self.yPierceBox.grid(row=11, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_2_frame(self):
         ''' parameters ??? frame '''
-        params2 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        params2.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
-        params2.grid_rowconfigure((1,2,3,4,5,6), weight=1)
-        params2.grid_rowconfigure((20), weight=50)
-        params2.grid_columnconfigure(1, weight=1)
-        probeLabel = ctk.CTkLabel(params2, text='Probing:')
+        params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
+        params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10,11,12,13), weight=1)
+        params.grid_rowconfigure((20), weight=50)
+        params.grid_columnconfigure(1, weight=1)
+        probeLabel = ctk.CTkLabel(params, text='PROBING:')
         probeLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
-        floatTravelLabel = ctk.CTkLabel(params2, text='Float Travel')
+        floatTravelLabel = ctk.CTkLabel(params, text='Float Travel')
         floatTravelLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.floatTravelBox = MySpinbox(params2, min_value=-25, max_value=25, step_size=0.01)
+        self.floatTravelBox = HalSpinBox(params, min_value=-25, max_value=25, decimals=2, step_size=0.01, pin_name='float-switch-travel')
         self.floatTravelBox.grid(row=1, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
-        probeSpeedLabel = ctk.CTkLabel(params2, text='Probe Speed')
+        probeSpeedLabel = ctk.CTkLabel(params, text='Probe Speed')
         probeSpeedLabel.grid(row=2, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.probeSpeedBox = MySpinbox(params2, decimals=0)
+        self.probeSpeedBox = HalSpinBox(params, pin_name='probe-feed-rate')
         self.probeSpeedBox.grid(row=2, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        probeHeightLabel = ctk.CTkLabel(params, text='Probe Height')
+        probeHeightLabel.grid(row=3, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.probeHeightBox = HalSpinBox(params, min_value=1, pin_name='probe-start-height')
+        self.probeHeightBox.grid(row=3, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        ohmicOffsetLabel = ctk.CTkLabel(params, text='Ohmic Offset')
+        ohmicOffsetLabel.grid(row=4, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.ohmicOffsetBox = HalSpinBox(params, min_value=-25, max_value=25, decimals=2, step_size=0.01, pin_name='ohmic-probe-offset')
+        self.ohmicOffsetBox.grid(row=4, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        ohmicRetriesLabel = ctk.CTkLabel(params, text='Ohmic Retries')
+        ohmicRetriesLabel.grid(row=5, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.ohmicRetriesBox = HalSpinBox(params, max_value=10, pin_name='ohmic-max-attempts')
+        self.ohmicRetriesBox.grid(row=5, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        skipIhsLabel = ctk.CTkLabel(params, text='Skip IHS')
+        skipIhsLabel.grid(row=6, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.skipIhsBox = HalSpinBox(params, max_value=999, pin_name='skip-ihs-distance')
+        self.skipIhsBox.grid(row=6, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        offsetSpeedLabel = ctk.CTkLabel(params, text='Offset Speed')
+        offsetSpeedLabel.grid(row=7, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.offsetSpeedBox = HalSpinBox(params, pin_name='offset-feed-rate')
+        self.offsetSpeedBox.grid(row=7, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        scribeLabel = ctk.CTkLabel(params, text='SCRIBING:')
+        scribeLabel.grid(row=8, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        scribeArmLabel = ctk.CTkLabel(params, text='Arm Delay')
+        scribeArmLabel.grid(row=9, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.scribeArmBox = HalSpinBox(params, max_value=10, decimals=1, step_size=0.1, pin_name='scribe-arm-delay')
+        self.scribeArmBox.grid(row=9, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        scribeOnLabel = ctk.CTkLabel(params, text='On Delay')
+        scribeOnLabel.grid(row=10, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.scribeOnBox = HalSpinBox(params, max_value=10, decimals=1, step_size=0.1, pin_name='scribe-on-delay')
+        self.scribeOnBox.grid(row=10, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        spotLabel = ctk.CTkLabel(params, text='SPOTTING:')
+        spotLabel.grid(row=11, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        spotThresholdLabel = ctk.CTkLabel(params, text='Threshold Volts')
+        spotThresholdLabel.grid(row=12, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.spotThresholdBox = HalSpinBox(params, max_value=200, pin_name='spotting-threshold')
+        self.spotThresholdBox.grid(row=12, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        spotTimeLabel = ctk.CTkLabel(params, text='Time On (mS)')
+        spotTimeLabel.grid(row=13, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.spotTimeBox = HalSpinBox(params, max_value=9999, pin_name='spotting-time')
+        self.spotTimeBox.grid(row=13, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_3_frame(self):
         ''' parameters ??? frame '''
-        params3 = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
-        params3.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
-        params3.grid_rowconfigure((1,2,3,4,5,6), weight=1)
-        params3.grid_rowconfigure((20), weight=50)
-        params3.grid_columnconfigure(1, weight=1)
-        thcLabel = ctk.CTkLabel(params3, text='THC:')
+        params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
+        params.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
+        params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10), weight=1)
+        params.grid_rowconfigure((20), weight=50)
+        params.grid_columnconfigure(1, weight=1)
+        thcLabel = ctk.CTkLabel(params, text='THC:')
         thcLabel.grid(row=0, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
-        thcAutoLabel = ctk.CTkLabel(params3, text='Auto Activate')
+        thcAutoLabel = ctk.CTkLabel(params, text='Auto Activate')
         thcAutoLabel.grid(row=1, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.thcAutoCheck = ctk.CTkCheckBox(params3, text='', border_width=1)
+        self.thcAutoCheck = HalCheckBox(params, pin_name='thc-auto')
         self.thcAutoCheck.grid(row=1, column=1, padx=(3,3), pady=(1,0), sticky='nsw')
-        thcDelayLabel = ctk.CTkLabel(params3, text='Start Delay')
+        thcDelayLabel = ctk.CTkLabel(params, text='Start Delay')
         thcDelayLabel.grid(row=2, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.thcDelayBox = MySpinbox(params3, max_value=9, step_size=0.01)
+        self.thcDelayBox = HalSpinBox(params, max_value=9, decimals=2, step_size=0.01, pin_name='thc-delay')
         self.thcDelayBox.grid(row=2, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
-        thcCountsLabel = ctk.CTkLabel(params3, text='Sample Counts')
-        thcCountsLabel.grid(row=3, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.thcCountsBox = MySpinbox(params3, decimals=0, max_value=1000)
-        self.thcCountsBox.grid(row=3, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcSampleCountsLabel = ctk.CTkLabel(params, text='Sample Counts')
+        thcSampleCountsLabel.grid(row=3, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcSampleCountsBox = HalSpinBox(params, max_value=1000, pin_name='thc-sample-counts')
+        self.thcSampleCountsBox.grid(row=3, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcSampleThresholdLabel = ctk.CTkLabel(params, text='Sample Threshold')
+        thcSampleThresholdLabel.grid(row=4, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcSampleThresholdBox = HalSpinBox(params, max_value=99, decimals=2, step_size=0.01, pin_name='thc-sample-threshold')
+        self.thcSampleThresholdBox.grid(row=4, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcThresholdLabel = ctk.CTkLabel(params, text='Threshold')
+        thcThresholdLabel.grid(row=5, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcThresholdBox = HalSpinBox(params, min_value=0.05, max_value=10, decimals=2, step_size=0.01, pin_name='thc-threshold')
+        self.thcThresholdBox.grid(row=5, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcSpeedLabel = ctk.CTkLabel(params, text='Speed (PID-P)')
+        thcSpeedLabel.grid(row=6, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcSpeedBox = HalSpinBox(params, max_value=1000, pin_name='pid-p-gain')
+        self.thcSpeedBox.grid(row=6, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcVADthresholdLabel = ctk.CTkLabel(params, text='VAD Threshold')
+        thcVADthresholdLabel.grid(row=7, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcVADthresholdBox = HalSpinBox(params, min_value=1, max_value=99, pin_name='cornerlock-threshold')
+        self.thcVADthresholdBox.grid(row=7, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcVoidSlopeLabel = ctk.CTkLabel(params, text='Void Slope')
+        thcVoidSlopeLabel.grid(row=8, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcVoidSlopeBox = HalSpinBox(params, min_value=1, max_value=10000, pin_name='voidlock-slope')
+        self.thcVoidSlopeBox.grid(row=8, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcPidILabel= ctk.CTkLabel(params, text='PID-I')
+        thcPidILabel.grid(row=9, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcPidIBox = HalSpinBox(params, max_value=1000, pin_name='pid-i-gain')
+        self.thcPidIBox.grid(row=9, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        thcPidDLabel = ctk.CTkLabel(params, text='PID-P')
+        thcPidDLabel.grid(row=10, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.thcPidDBox = HalSpinBox(params, max_value=1000, pin_name='pid-d-gain')
+        self.thcPidDBox.grid(row=10, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        motionLabel = ctk.CTkLabel(params, text='MOTION:')
+        motionLabel.grid(row=11, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
+        safeHeightLabel = ctk.CTkLabel(params, text='Safe Height')
+        safeHeightLabel.grid(row=12, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.safeHeightBox = HalSpinBox(params, min_value=1, pin_name='safe-height')
+        self.safeHeightBox.grid(row=12, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
+        setupSpeedLabel = ctk.CTkLabel(params, text='Setup Speed')
+        setupSpeedLabel.grid(row=13, column=0, padx=(3,1), pady=(1,0), sticky='nse')
+        self.setupSpeedBox = HalSpinBox(params, pin_name='setup-feed-rate')
+        self.setupSpeedBox.grid(row=13, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_buttons(self):
         ''' parameters buttons'''
@@ -492,18 +630,33 @@ class App(ctk.CTk):
         self.status3 = ctk.CTkFrame(self.tabs.tab('Status'), border_width=1, border_color=self.borderColor)
         self.status3.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
 
-class MySpinbox(ctk.CTkFrame):
-    ''' this is a hack of the tutorial from 
+class HalCheckBox(ctk.CTkCheckBox):
+    ''' adds a hal pin to a CTkCheckBox'''
+    def __init__(self,
+                 master,
+                 pin_name = None):
+        super().__init__(master, text='', border_width=1)
+        self.pin_name = pin_name
+        self._variable = ctk.IntVar()
+        if pin_name:
+            self.winfo_toplevel().comp.newpin(pin_name, hal.HAL_BIT, hal.HAL_OUT)
+            self._variable_callback_name = self._variable.trace_add('write', self.write_hal_pin)
+
+    def write_hal_pin(self, *args):
+        self.winfo_toplevel().comp[self.pin_name] = self.get()
+
+class HalSpinBox(ctk.CTkFrame):
+    ''' this is a hack of the tutorial from:
         https://customtkinter.tomschimansky.com/tutorial/spinbox '''
     def __init__(self,
                  master,
                  width=100,
                  height=30,
-                 decimals=2,
-                 start_value=0,
                  min_value=0,
                  max_value=100,
+                 decimals=0,
                  step_size=1,
+                 start_value=0,
                  wrap=True,
                  justify='right',
                  pin_name = None,
@@ -518,7 +671,6 @@ class MySpinbox(ctk.CTkFrame):
         self.wrap = wrap
         self.pin_name = pin_name
         self.command = command
-#        self.configure(fg_color=('gray78', 'gray28'))  # set frame color
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure((0, 2), weight=1)
         self.grid_columnconfigure(1, weight=2)
@@ -558,9 +710,7 @@ class MySpinbox(ctk.CTkFrame):
                 self.set(value)
             if self.pin_name:
                 self.winfo_toplevel().comp[self.pin_name] = text
-        except ValueError:
-            return
-        except TypeError:
+        except (TypeError, ValueError):
             return
 
     def spin(self, direction):
