@@ -6,42 +6,28 @@ import linuxcnc
 import hal
 import customtkinter as ctk
 from customtkinter import filedialog
-import configparser
+from configparser import RawConfigParser, NoSectionError, NoOptionError
 
 try:
     INI = linuxcnc.ini(sys.argv[2])
 except:
     print('\nERROR:\ncannot find linuxcnc ini file')
-    sys.exit()
+    sys.exit(0)
 APPDIR = os.path.dirname(os.path.realpath(__file__))
-IMGPATH = os.path.join(APPDIR, 'lib/images')
-TMPPATH = '/tmp/plasmactk'
-PREFS = configparser.ConfigParser()
-PREFSDIR = os.path.dirname(sys.argv[2])
-
-if not os.path.isdir(TMPPATH):
-    os.mkdir(TMPPATH)
+CONFIGDIR = os.path.dirname(sys.argv[2])
+IMGDIR = os.path.join(APPDIR, 'lib/images')
+TMPDIR = '/tmp/plasmactk'
+if not os.path.isdir(TMPDIR):
+    os.mkdir(TMPDIR)
 sys.path.append(os.path.join(APPDIR, 'lib'))
-
-#print(f"   CWD: {os.getcwd()}")
-#print(f"APPDIR: {APPDIR}")
-#configPath = os.getcwd()
-#p2Path = os.path.join(configPath, 'plasmac2')
-#if os.path.isdir(os.path.join(p2Path, 'lib')):
-#    extHalPins = {}
-#    import sys
-#    libPath = os.path.join(p2Path, 'lib')
-#    sys.path.append(libPath)
 
 import conversational
 
-
-class App(ctk.CTk):
-    ''' the application'''
+class PlasmaCTk(ctk.CTk):
     def __init__(self):
         super().__init__()
-        ctk.set_default_color_theme('dark-blue')  # Themes: blue (default), dark-blue, green
-        ctk.set_appearance_mode('dark')  # Modes: system (default), light, dark
+        ctk.set_default_color_theme('dark-blue')
+        ctk.set_appearance_mode('dark')
         self.title('plasma-ctk')
         self.geometry(f'{800}x{600}+{200}+{200}')
         self.grid_columnconfigure(1, weight=1)
@@ -58,7 +44,13 @@ class App(ctk.CTk):
         except:
             print('\nCannot create hal component\nIs LinuxCNC running?\nRunning in development mode...\n')
             self.comp = {'development': True}
-
+        # get some settings from the ini file
+        self.machine = INI.find('EMC', 'MACHINE')
+        self.unitsPerMm = 1 if INI.find('TRAJ', 'LINEAR_UNITS') == 'mm' else 1 / 25.4
+        self.thcFeedRate = float(INI.find('AXIS_Z', 'MAX_VELOCITY')) * float(INI.find('AXIS_Z', 'OFFSET_AV_RATIO')) * 60
+        self.offsetFeedRate = min(float(INI.find('AXIS_X', 'MAX_VELOCITY')) * 30,
+                                  float(INI.find('AXIS_Y', 'MAX_VELOCITY')) * 30,
+                                  float(INI.find('TRAJ', 'MAX_LINEAR_VELOCITYs') or 100000))
         # dummy button to get some colors
         blah = ctk.CTkButton(self)
         self.buttonOffColor = blah.cget('fg_color')
@@ -74,17 +66,14 @@ class App(ctk.CTk):
         self.fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
         self.initialDir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
         self.defaultExtension = '.ngc'
-        # create the gui
         self.create_gui()
         self.comp.ready()
-        self.machine = INI.find('EMC', 'MACHINE') or None
-        if not self.machine:
-            print('FUKT')
-            sys.exit()
-        PREFS.read(os.path.join(PREFSDIR, f"{self.machine}.prefs"))
-        self.parameter_reload()
+        self.prefs = Prefs(allow_no_value=True)
+        self.prefsFile = os.path.join(CONFIGDIR, f"{self.machine}.prefs")
+        self.prefs.read(self.prefsFile)
+        self.parameter_load()
 
-        self.tmp1 = None
+        self.tmp1 = None # temp for testing
 
         self.after(100, self.periodic)
 
@@ -217,50 +206,94 @@ class App(ctk.CTk):
     # def rgb_to_hex(self, r, g, b):
     #     return f'#{r:02x}{g:02x}{b:02x}'
 
-    def parameter_save(self):
-        print('save parameters')
+##############################################################################
+# parameters
+##############################################################################
+    def parameter_write(self):
+        with open(self.prefsFile, 'w') as prefsFile:
+            self.prefs.write(prefsFile)
 
-    def parameter_reload(self):
-        print('load parameters')
+    def parameter_load(self):
+        ''' section, option, default '''
         # parameter column 1
-        self.startFailBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Fail Timeout'))
-        self.maxStartsBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Maximum Starts'))
-        self.retryDelayBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Restart Delay'))
-        self.voltageScaleBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Voltage Scale'))
-        self.voltageOffsetBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc Voltage Offset'))
-        self.heightPerVoltBox.set(PREFS.get('PLASMA_PARAMETERS', 'Height Per Volt'))
-        self.okHighBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc OK High'))
-        self.okLowBox.set(PREFS.get('PLASMA_PARAMETERS', 'Arc OK Low'))
-        self.xPierceBox.set(PREFS.get('PLASMA_PARAMETERS', 'X Pierce Offset'))
-        self.yPierceBox.set(PREFS.get('PLASMA_PARAMETERS', 'Y Pierce Offset'))
+        self.startFailBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc Fail Timeout', 3))
+        self.maxStartsBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc Maximum Starts', 3))
+        self.retryDelayBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc Restart Delay', 1))
+        self.voltageScaleBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc Voltage Scale', 1))
+        self.voltageOffsetBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc Voltage Offset', 0))
+        self.heightPerVoltBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Height Per Volt', 0.1 * self.unitsPerMm))
+        self.okHighBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc OK High', 250))
+        self.okLowBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Arc OK Low', 60))
+        self.xPierceBox.set(self.prefs.get('PLASMA_PARAMETERS', 'X Pierce Offset', 1.6 * self.unitsPerMm))
+        self.yPierceBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Y Pierce Offset', 0))
         # parameter column 2
-        self.floatTravelBox.set(PREFS.get('PLASMA_PARAMETERS', 'Float Switch Travel'))
-        self.probeSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Probe Feed Rate'))
-        self.probeHeightBox.set(PREFS.get('PLASMA_PARAMETERS', 'Probe Start Height'))
-        self.ohmicOffsetBox.set(PREFS.get('PLASMA_PARAMETERS', 'Ohmic Probe Offset'))
-        self.ohmicRetriesBox.set(PREFS.get('PLASMA_PARAMETERS', 'Ohmic Maximum Attempts'))
-        self.skipIhsBox.set(PREFS.get('PLASMA_PARAMETERS', 'Skip IHS Distance'))
-        self.offsetSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Offset Feed Rate'))
-        self.scribeArmBox.set(PREFS.get('PLASMA_PARAMETERS', 'Scribe Arming Delay'))
-        self.scribeOnBox.set(PREFS.get('PLASMA_PARAMETERS', 'Scribe On Delay'))
-        self.spotThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'Spotting Threshold'))
-        self.spotTimeBox.set(PREFS.get('PLASMA_PARAMETERS', 'Spotting Time'))
+        self.floatTravelBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Float Switch Travel', 1.5 * self.unitsPerMm))
+        self.probeSpeedBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Probe Feed Rate', 300 * self.unitsPerMm))
+        self.probeHeightBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Probe Start Height', 25 * self.unitsPerMm))
+        self.ohmicOffsetBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Ohmic Probe Offset', 0))
+        self.ohmicRetriesBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Ohmic Maximum Attempts', 0))
+        self.skipIhsBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Skip IHS Distance', 0))
+        self.offsetSpeedBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Offset Feed Rate', self.offsetFeedRate * 0.8))
+        self.scribeArmBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Scribe Arming Delay', 0))
+        self.scribeOnBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Scribe On Delay', 0))
+        self.spotThresholdBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Spotting Threshold', 1))
+        self.spotTimeBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Spotting Time', 0))
         # parameter column 3
-        if PREFS.get('ENABLE_OPTIONS', 'THC auto') == 'True':
+        if self.prefs.get('ENABLE_OPTIONS', 'THC auto', 'False') == 'True':
             self.thcAutoCheck.select()
         else:
             self.thcAutoCheck.deselect()
-        self.thcDelayBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Delay'))
-        self.thcSampleCountsBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Counts'))
-        self.thcSampleThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Sample Threshold'))
-        self.thcThresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'THC Threshold'))
-        self.thcSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid P Gain'))
-        self.thcVADthresholdBox.set(PREFS.get('PLASMA_PARAMETERS', 'Velocity Anti Dive Threshold'))
-        self.thcVoidSlopeBox.set(PREFS.get('PLASMA_PARAMETERS', 'Void Sense Slope'))
-        self.thcPidIBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid I Gain'))
-        self.thcPidDBox.set(PREFS.get('PLASMA_PARAMETERS', 'Pid D Gain'))
-        self.safeHeightBox.set(PREFS.get('PLASMA_PARAMETERS', 'Safe Height'))
-        self.setupSpeedBox.set(PREFS.get('PLASMA_PARAMETERS', 'Setup Feed Rate'))
+        self.thcDelayBox.set(self.prefs.get('PLASMA_PARAMETERS', 'THC Delay', 0.5))
+        self.thcSampleCountsBox.set(self.prefs.get('PLASMA_PARAMETERS', 'THC Sample Counts', 50))
+        self.thcSampleThresholdBox.set(self.prefs.get('PLASMA_PARAMETERS', 'THC Sample Threshold', 1))
+        self.thcThresholdBox.set(self.prefs.get('PLASMA_PARAMETERS', 'THC Threshold', 1))
+        self.thcSpeedBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Pid P Gain', 10))
+        self.thcVADthresholdBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Velocity Anti Dive Threshold', 90))
+        self.thcVoidSlopeBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Void Sense Slope', 500))
+        self.thcPidIBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Pid I Gain', 0))
+        self.thcPidDBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Pid D Gain', 0))
+        self.safeHeightBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Safe Height', 25 * self.unitsPerMm))
+        self.setupSpeedBox.set(self.prefs.get('PLASMA_PARAMETERS', 'Setup Feed Rate', self.thcFeedRate * 0.8))
+        self.parameter_write()
+
+    def parameter_save(self):
+        # parameter column 1
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc Fail Timeout', self.startFailBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc Maximum Starts', self.maxStartsBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc Restart Delay', self.retryDelayBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc Voltage Scale', self.voltageScaleBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc Voltage Offset', self.voltageOffsetBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Height Per Volt', self.heightPerVoltBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc OK High', self.okHighBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Arc OK Low', self.okLowBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'X Pierce Offset', self.xPierceBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Y Pierce Offset', self.yPierceBox.get())
+        # parameter column 2
+        self.prefs.set('PLASMA_PARAMETERS', 'Float Switch Travel', self.floatTravelBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Probe Feed Rate', self.probeSpeedBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Probe Start Height', self.probeHeightBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Ohmic Probe Offset', self.ohmicOffsetBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Ohmic Maximum Attempts', self.ohmicRetriesBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Skip IHS Distance', self.skipIhsBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Offset Feed Rate', self.offsetSpeedBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Scribe Arming Delay', self.scribeArmBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Scribe On Delay', self.scribeOnBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Spotting Threshold', self.spotThresholdBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Spotting Time', self.spotTimeBox.get())
+        # parameter column 3
+        self.prefs.set('ENABLE_OPTIONS', 'THC auto', bool(self.thcAutoCheck.get()))
+        self.prefs.set('PLASMA_PARAMETERS', 'THC Delay', self.thcDelayBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'THC Sample Counts', self.thcSampleCountsBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'THC Sample Threshold', self.thcSampleThresholdBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'THC Threshold', self.thcThresholdBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Pid P Gain', self.thcSpeedBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Velocity Anti Dive Threshold', self.thcVADthresholdBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Void Sense Slope', self.thcVoidSlopeBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Pid I Gain', self.thcPidIBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Pid D Gain', self.thcPidDBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Safe Height', self.safeHeightBox.get())
+        self.prefs.set('PLASMA_PARAMETERS', 'Setup Feed Rate', self.setupSpeedBox.get())
+        self.parameter_write()
 
 ##############################################################################
 # gui build
@@ -269,7 +302,6 @@ class App(ctk.CTk):
 
         # temporary for conversational testing
         self.materialFileDict = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
-        self.unitsPerMm = 1
         self.matNum = 0
 
         self.create_tabs()# = Tabs(self)
@@ -421,7 +453,7 @@ class App(ctk.CTk):
         self.convPreview.grid_columnconfigure(1, weight=1)
 
     def create_parameters_1_frame(self):
-        ''' parameters ??? frame '''
+        ''' arc and pierce only parameters '''
         params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
         params.grid(row=0, column=0, padx=1, pady=1, sticky='nsew')
         params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10,11), weight=1)
@@ -473,7 +505,7 @@ class App(ctk.CTk):
         self.yPierceBox.grid(row=11, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_2_frame(self):
-        ''' parameters ??? frame '''
+        ''' probing, scribing, and spotting parameters '''
         params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
         params.grid(row=0, column=1, padx=1, pady=1, sticky='nsew')
         params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10,11,12,13), weight=1)
@@ -507,7 +539,7 @@ class App(ctk.CTk):
         self.skipIhsBox.grid(row=6, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
         offsetSpeedLabel = ctk.CTkLabel(params, text='Offset Speed')
         offsetSpeedLabel.grid(row=7, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.offsetSpeedBox = HalSpinBox(params, pin_name='offset-feed-rate')
+        self.offsetSpeedBox = HalSpinBox(params, max_value=self.offsetFeedRate, pin_name='offset-feed-rate')
         self.offsetSpeedBox.grid(row=7, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
         scribeLabel = ctk.CTkLabel(params, text='SCRIBING:')
         scribeLabel.grid(row=8, column=0, columnspan=2, padx=(3,0), pady=(3,0), sticky='w')
@@ -531,7 +563,7 @@ class App(ctk.CTk):
         self.spotTimeBox.grid(row=13, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_3_frame(self):
-        ''' parameters ??? frame '''
+        ''' thc and motion parameters '''
         params = ctk.CTkFrame(self.tabs.tab('Parameters'), border_width=1, border_color=self.borderColor)
         params.grid(row=0, column=2, padx=1, pady=1, sticky='nsew')
         params.grid_rowconfigure((1,2,3,4,5,6,7,8,9,10), weight=1)
@@ -587,7 +619,7 @@ class App(ctk.CTk):
         self.safeHeightBox.grid(row=12, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
         setupSpeedLabel = ctk.CTkLabel(params, text='Setup Speed')
         setupSpeedLabel.grid(row=13, column=0, padx=(3,1), pady=(1,0), sticky='nse')
-        self.setupSpeedBox = HalSpinBox(params, pin_name='setup-feed-rate')
+        self.setupSpeedBox = HalSpinBox(params, max_value=self.thcFeedRate, pin_name='setup-feed-rate')
         self.setupSpeedBox.grid(row=13, column=1, padx=(1,3), pady=(1,0), sticky='nsew')
 
     def create_parameters_buttons(self):
@@ -597,7 +629,7 @@ class App(ctk.CTk):
         paramButtons.grid_columnconfigure((0,3), weight=1)
         paramSave = ctk.CTkButton(paramButtons, text='Save', command=self.parameter_save)
         paramSave.grid(row=0, column=1, padx=3)
-        paramLoad = ctk.CTkButton(paramButtons, text='Reload', command=self.parameter_reload)
+        paramLoad = ctk.CTkButton(paramButtons, text='Reload', command=self.parameter_load)
         paramLoad.grid(row=0, column=2, padx=3)
 
     def create_settings_1_frame(self):
@@ -749,7 +781,28 @@ class HalSpinBox(ctk.CTkFrame):
         if self.pin_name:
             self.winfo_toplevel().comp[self.pin_name] = text
 
+class Prefs(RawConfigParser):
+    optionxform = str # preserve case
 
+    def get(self, section, option, default=None):
+        try:
+            return RawConfigParser.get(self, section, option)
+        except NoOptionError:
+            RawConfigParser.set(self, section, option, default)
+            return default
+        except Exception as e:
+            print(f"configparser getter error:\n{e}")
+            return None
 
-app = App()
+    def set(self, section, option, value):
+        try:
+            return RawConfigParser.set(self, section, option, value)
+        except NoSectionError:
+            RawConfigParser.add_section(self, section)
+            return RawConfigParser.set(self, section, option, value)
+        except Exception as e:
+            print(f"configparser setter error:\n{e}")
+            return None
+
+app = PlasmaCTk()
 app.mainloop()
