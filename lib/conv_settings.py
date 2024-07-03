@@ -56,16 +56,17 @@ def save_clicked(self):
     if error:
         self.dialog_show_ok(_('Settings Error'), error)
         return
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Preamble', self.preAmble, str)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Postamble', self.postAmble, str)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Origin', self.origin, int)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Leadin', self.leadIn, float)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Leadout', self.leadOut, float)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Hole diameter', self.smallHoleDia, float)
-#    self.putPrefs(self.prefs, 'CONVERSATIONAL', 'Hole speed', self.smallHoleSpeed, int)
+    self.parent.prefs.set('CONVERSATIONAL', 'Preamble', self.preAmble)
+    self.parent.prefs.set('CONVERSATIONAL', 'Postamble', self.postAmble)
+    self.parent.prefs.set('CONVERSATIONAL', 'Origin', self.origin)
+    self.parent.prefs.set('CONVERSATIONAL', 'Leadin', self.leadIn)
+    self.parent.prefs.set('CONVERSATIONAL', 'Leadout', self.leadOut)
+    self.parent.prefs.set('CONVERSATIONAL', 'Hole diameter', self.smallHoleDia)
+    self.parent.prefs.set('CONVERSATIONAL', 'Hole speed', self.smallHoleSpeed)
     self.savedSettings['lead_in'] = self.liValue.get()
     self.savedSettings['lead_out'] = self.loValue.get()
     self.savedSettings['start_pos'] = self.spButton.cget('text')
+    self.parent.parameter_write()
     self.settingsExited = 1
 
 def reload_clicked(self):
@@ -85,13 +86,14 @@ def exit_clicked(self):
 
 def load(self, preAmble, leadin, smallHole, postAmble=None):
     postAmble = postAmble if postAmble else preAmble
-    self.preAmble = preAmble#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Preamble', preAmble, str)
-    self.postAmble = postAmble#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Postamble', postAmble, str)
-    self.origin = 0#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Origin', 0, int)
-    self.leadIn = leadin#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Leadin', leadin, float)
-    self.leadOut = 0#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Leadout', 0, float)
-    self.smallHoleDia = smallHole#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Hole diameter', smallHole, float)
-    self.smallHoleSpeed = 60#self.getPrefs(self.prefs, 'CONVERSATIONAL', 'Hole speed', 60, int)
+    self.preAmble = self.parent.prefs.get('CONVERSATIONAL', 'Preamble', preAmble)
+    self.postAmble = self.parent.prefs.get('CONVERSATIONAL', 'Postamble', postAmble)
+    self.origin = bool(self.parent.prefs.get('CONVERSATIONAL', 'Origin', 0))
+    self.leadIn = float(self.parent.prefs.get('CONVERSATIONAL', 'Leadin', leadin))
+    self.leadOut = float(self.parent.prefs.get('CONVERSATIONAL', 'Leadout', 0))
+    self.smallHoleDia = float(self.parent.prefs.get('CONVERSATIONAL', 'Hole diameter', smallHole))
+    self.smallHoleSpeed = int(self.parent.prefs.get('CONVERSATIONAL', 'Hole speed', 60))
+    self.parent.parameter_write()
 
 def show(self):
     self.preValue.set(self.preAmble)
@@ -101,14 +103,11 @@ def show(self):
     self.shValue.set(f"{self.smallHoleDia}")
     self.hsValue.set(f"{self.smallHoleSpeed}")
     if self.origin:
-#        self.spbValue.set('CENTER')
         self.spButton.configure(text = _('Center'))
     else:
-#        self.spbValue.set('BTM LEFT')
         self.spButton.configure(text = _('Btm left'))
 
 def widgets(self):
-    print(f"self: {self}")
     # connections
     self.spButton.configure(command=lambda:self.start_point_clicked())
     self.saveS.configure(command=lambda:save_clicked(self))

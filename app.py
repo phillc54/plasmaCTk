@@ -8,21 +8,6 @@ import customtkinter as ctk
 from customtkinter import filedialog
 from configparser import RawConfigParser, NoSectionError, NoOptionError
 
-try:
-    INI = linuxcnc.ini(sys.argv[2])
-except:
-    print('\nERROR:\ncannot find linuxcnc ini file')
-    sys.exit(0)
-APPDIR = os.path.dirname(os.path.realpath(__file__))
-CONFIGDIR = os.path.dirname(sys.argv[2])
-IMGDIR = os.path.join(APPDIR, 'lib/images')
-TMPDIR = '/tmp/plasmactk'
-if not os.path.isdir(TMPDIR):
-    os.mkdir(TMPDIR)
-sys.path.append(os.path.join(APPDIR, 'lib'))
-
-import conversational
-
 class PlasmaCTk(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -32,25 +17,31 @@ class PlasmaCTk(ctk.CTk):
         self.geometry(f'{800}x{600}+{200}+{200}')
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
+        self.ini = linuxcnc.ini(sys.argv[2])
+        self.appDir = os.path.dirname(os.path.realpath(__file__))
+        self.configDir = os.path.dirname(sys.argv[2])
+        self.imgDir = os.path.join(self.appDir, 'lib/images')
+        self.tmpDir = '/tmp/plasmactk'
+        if not os.path.isdir(self.tmpDir):
+            os.mkdir(self.tmpDir)
+        sys.path.append(os.path.join(self.appDir, 'lib'))
         self.C = linuxcnc.command()
         self.S = linuxcnc.stat()
         self.E = linuxcnc.error()
-        try:
-            self.comp = hal.component('plasmactk-ui')
-            self.create_hal_pins(self.comp)
-            # self.S.poll()
-#FIXME   this is just for testing purposes and needs to be removed when completed
-            hal.set_p('plasmac.cut-feed-rate', '1')
-        except:
-            print('\nCannot create hal component\nIs LinuxCNC running?\nRunning in development mode...\n')
-            self.comp = {'development': True}
+        self.comp = hal.component('plasmactk')
+        self.create_hal_pins(self.comp)
+        # self.S.poll()
         # get some settings from the ini file
-        self.machine = INI.find('EMC', 'MACHINE')
-        self.unitsPerMm = 1 if INI.find('TRAJ', 'LINEAR_UNITS') == 'mm' else 1 / 25.4
-        self.thcFeedRate = float(INI.find('AXIS_Z', 'MAX_VELOCITY')) * float(INI.find('AXIS_Z', 'OFFSET_AV_RATIO')) * 60
-        self.offsetFeedRate = min(float(INI.find('AXIS_X', 'MAX_VELOCITY')) * 30,
-                                  float(INI.find('AXIS_Y', 'MAX_VELOCITY')) * 30,
-                                  float(INI.find('TRAJ', 'MAX_LINEAR_VELOCITYs') or 100000))
+        self.machine = self.ini.find('EMC', 'MACHINE')
+        self.unitsPerMm = 1 if self.ini.find('TRAJ', 'LINEAR_UNITS') == 'mm' else 1 / 25.4
+        self.thcFeedRate = float(self.ini.find('AXIS_Z', 'MAX_VELOCITY')) * float(self.ini.find('AXIS_Z', 'OFFSET_AV_RATIO')) * 60
+        self.offsetFeedRate = min(float(self.ini.find('AXIS_X', 'MAX_VELOCITY')) * 30,
+                                  float(self.ini.find('AXIS_Y', 'MAX_VELOCITY')) * 30,
+                                  float(self.ini.find('TRAJ', 'MAX_LINEAR_VELOCITYs') or 100000))
+        # read the prefs file
+        self.prefs = Prefs(allow_no_value=True)
+        self.prefsFile = os.path.join(self.configDir, f"{self.machine}.prefs")
+        self.prefs.read(self.prefsFile)
         # dummy button to get some colors
         blah = ctk.CTkButton(self)
         self.buttonOffColor = blah.cget('fg_color')
@@ -68,9 +59,6 @@ class PlasmaCTk(ctk.CTk):
         self.defaultExtension = '.ngc'
         self.create_gui()
         self.comp.ready()
-        self.prefs = Prefs(allow_no_value=True)
-        self.prefsFile = os.path.join(CONFIGDIR, f"{self.machine}.prefs")
-        self.prefs.read(self.prefsFile)
         self.parameter_load()
 
         self.tmp1 = None # temp for testing
@@ -83,28 +71,32 @@ class PlasmaCTk(ctk.CTk):
 ##############################################################################
     def open_input_dialog_event(self):
         dialog = ctk.CTkInputDialog(text='Type in a number:', title='CTkInputDialog')
-        # print('CTkInputDialog:', dialog.get_input())
+        print('CTkInputDialog:', dialog.get_input())
 
     def change_appearance_mode_event(self, new_appearance_mode: str):
         ctk.set_appearance_mode(new_appearance_mode)
+        print('change appearance to', new_appearance_mode)
 
     def change_scaling_event(self, new_scaling: str):
         new_scaling_float = int(new_scaling.replace('%', '')) / 100
         ctk.set_widget_scaling(new_scaling_float)
+        print('cahnge scaling to', new_scaling_float)
 
     def sidebar_button_event(self):
-        print('sidebar_button click')
+        print('sidebar button clicked')
 
     def set_tab_state(self, tabview, tab, state):
         ''' set a tab state to either normal or disabled '''
         stat = 'normal' if state else 'disabled'
         tabview._segmented_button._buttons_dict[tab].configure(state = stat)
+        print('set tab', tab, 'state to', stat)
 
 
 ##############################################################################
 # overrides
 ##############################################################################
     def ovr_feed_changed(self, value):
+        print(value)
         self.ovrFeedLbl.configure(text=f'Feed {value:.0f}%')
 
     def ovr_feed_reset(self, event, default=100):
@@ -112,6 +104,7 @@ class PlasmaCTk(ctk.CTk):
         self.ovrFeedLbl.configure(text=f'Feed {default:.0f}%')
 
     def ovr_rapid_changed(self, value):
+        print(value)
         self.ovrRapidLbl.configure(text=f'Rapid {value:.0f}%')
 
     def ovr_rapid_reset(self, event, default=100):
@@ -151,9 +144,10 @@ class PlasmaCTk(ctk.CTk):
         file = filedialog.askopenfile(initialdir=self.initialDir, filetypes=self.fileTypes)
         if not file:
             return
-        print('load file into LinuxCNC here')
-        self.fileLoaded = file
-        self.conv.load_file(file)
+        print('load file into LinuxCNC here', file.name)
+        self.initialDir = os.path.dirname(file.name)
+        self.fileLoaded = file.name
+        self.conv.plot_file(file.name, True)
 
 ##############################################################################
 # user buttons
@@ -190,13 +184,11 @@ class PlasmaCTk(ctk.CTk):
 # periodic
 ##############################################################################
     def periodic(self):
-        #print('+100mS')
 
-        # bob = hal.get_value('plasmactk-ui.arc-fail-delay')
+        # bob = hal.get_value('plasmactk.arc-fail-delay')
         # if bob != self.tmp1:
         #     self.tmp1 = bob
         #     print(f"pin changed to {bob}")
-
 
         self.after(100, self.periodic)
 
@@ -299,7 +291,6 @@ class PlasmaCTk(ctk.CTk):
 # gui build
 ##############################################################################
     def create_gui(self):
-
         # temporary for conversational testing
         self.materialFileDict = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
         self.matNum = 0
@@ -315,7 +306,8 @@ class PlasmaCTk(ctk.CTk):
         self.create_conversational_toolbar_frame()
         self.create_conversational_preview_frame()
         self.create_conversational_input_frame()
-        self.conv = conversational.Conversational(self, False)
+        import conversational
+        self.conv = conversational.Conversational(self)
         self.create_parameters_1_frame()
         self.create_parameters_2_frame()
         self.create_parameters_3_frame()
@@ -331,7 +323,6 @@ class PlasmaCTk(ctk.CTk):
         ''' tabview as the main window '''
 
         def tab_changed(tab):
-            print(f"{tab} is active")
             if tab == 'Conversational':
                 self.conv.canvas.update()
                 self.conv.zoom_all()

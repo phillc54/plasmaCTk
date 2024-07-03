@@ -1,7 +1,6 @@
 #!/bin/python3
 
 import os
-import sys
 import gcode
 import math
 import customtkinter as ctk
@@ -10,44 +9,6 @@ from CTkMessagebox import CTkMessagebox
 from shutil import copy
 from importlib import reload
 from PIL import Image
-
-import time
-
-# this ugly stuff is to allow running stand-alone
-# and/or running directly from vscode with ctrl-r
-if __name__ == '__main__':
-    error = ''
-    metric = True
-    materials = None
-    args = sys.argv[1:]
-    if len(args):
-        if '-i' in args:
-            metric = False
-        if '-m' in args:
-            file = args[args.index('-m') + 1] if '-l' != args[-1] else ''
-            if os.path.isfile(file):
-                materials = file
-            else:
-                error += f"invalid materials file:      {file}\n"
-        if '-l' in args:
-            path = args[args.index('-l') + 1] if '-l' != args[-1] else ''
-            if os.path.isdir(path):
-                sys.path.append(os.path.join(path, 'lib/python'))
-            else:
-                error += f"invalid linuxcnc repository: {path}\n"
-    else: # path required for vscode
-        sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
-    if error:
-        usage  = 'Stand-alone options are:\n'
-        usage += '  -i          - Imperial mode, metric is the default\n'
-        usage += '  -l "path"   - Path to root of rip repository, e.g. ~/linuxcnc-dev\n'
-        usage += '  -m "path"   - Path to a material file, e.g. ~/linuxcnc/configs/plasma/plasma_material.cfg\n\n'
-        print(f"\nError:\n{error}\n{usage}")
-        sys.exit()
-
-if not sys.argv[1:]: # path required for vscode
-    sys.path.append(os.path.expanduser('~/git/linuxcnc-dev/lib/python'))
-
 import conv_settings as CONVSET
 import conv_line as CONVLIN
 import conv_circle as CONVCIR
@@ -62,26 +23,19 @@ import conv_gusset as CONVGUS
 import conv_sector as CONVSEC
 import conv_block as CONVBLO
 
-APPDIR = os.path.dirname(os.path.realpath(__file__))
-TMPPATH = '/tmp/plasmactk'
-IMGPATH = os.path.join(APPDIR, 'images')
-if not os.path.isdir(TMPPATH):
-    os.mkdir(TMPPATH)
-
 class Conversational():
-    def __init__(self, parent, standalone=False):
+    def __init__(self, parent):
         super().__init__()
         self.convFirstRun = True
         self.parent = parent
-        self.standalone = standalone
         self.existingFile = None
 #        self.wcs_rotation = wcs_rotation
         self.shapeLen = {'x':None, 'y':None}
-        self.fTmp = os.path.join(TMPPATH, 'temp.ngc')
-        self.fNgc = os.path.join(TMPPATH, 'shape.ngc')
-        self.fNgcBkp = os.path.join(TMPPATH, 'backup.ngc')
-        self.fNgcSent = os.path.join(TMPPATH, 'sent_shape.ngc')
-        self.filteredBkp = os.path.join(TMPPATH, 'filtered_bkp.ngc')
+        self.fTmp = os.path.join(self.parent.tmpDir, 'temp.ngc')
+        self.fNgc = os.path.join(self.parent.tmpDir, 'shape.ngc')
+        self.fNgcBkp = os.path.join(self.parent.tmpDir, 'backup.ngc')
+        self.fNgcSent = os.path.join(self.parent.tmpDir, 'sent_shape.ngc')
+        self.filteredBkp = os.path.join(self.parent.tmpDir, 'filtered_bkp.ngc')
         self.savedSettings = {'start_pos':None, 'cut_type':None, 'lead_in':None, 'lead_out':None}
         self.buttonState = {'newC':False, 'saveC':False, 'sendC':False, 'settingsC':False}
         self.convButton = 'line'
@@ -89,29 +43,22 @@ class Conversational():
         self.module = None
         self.oldModule = None
         self.convLine = {}
-#FIXME - different for standalone vs normal
-        if self.parent.unitsPerMm == 1:
-            smallHole = 32
-            leadin = 5
-            preAmble = 'G21\nG64P0.25'
-        else:
-            smallHole = 1.25
-            leadin = 0.2
-            preAmble = 'G20\nG64P0.01'
-        self.preAmble = f"{preAmble}\nG40\nG49\nG80\nG90\nG92.1\nG94\nG97"
-        self.xOrigin = 0.000
-        self.yOrigin = 0.000
-        self.showRapids = False
+#        self.xOrigin = 0.000
+#        self.yOrigin = 0.000
+        self.showRapids = True#False
         self.rapidArrowLen = 5
         self.zoomLimits = ()
         self.canvasDefault = {}
         self.canvasScale = 1
         self.canvasSize = (1, 1)
-
         if not self.convFirstRun and self.parent.comp['development']:
             reload(CONVSET)
         else:
-            CONVSET.load(self, self.preAmble, leadin, smallHole, self.preAmble)
+            smallHole = round(32 * self.parent.unitsPerMm, 2)
+            leadIn = round(5 * self.parent.unitsPerMm, 2)
+            preAmble  = 'G21\nG64P0.25' if self.parent.unitsPerMm == 1 else 'G20\nG64P0.01'
+            preAmble += '\nG40\nG49\nG80\nG90\nG92.1\nG94\nG97'
+            CONVSET.load(self, preAmble, leadIn, smallHole, preAmble)
         if self.convFirstRun or self.parent.comp['development']:
             self.create_toolbar_widgets()
             self.create_input_widgets()
@@ -134,7 +81,7 @@ class Conversational():
         for entry in self.buttons: entry.bind('<space>', self.button_key_pressed)
         self.entry_validation()
         self.canon = Canon()
-        parameter = os.path.join(TMPPATH, 'parameters')
+        parameter = os.path.join(self.parent.tmpDir, 'parameters')
         self.canon.parameter_file = parameter
         self.bgColor = self.parent.cget('background')
         self.g5xIndex = 1 # do we need this without a real preview ???
@@ -147,10 +94,7 @@ class Conversational():
         self.addC.configure(state = 'disabled')
         self.newC.configure(state = 'normal')
         self.saveC.configure(state = 'disabled')
-        if self.standalone:
-            self.sendC.configure(state = 'normal')
-        else:
-            self.sendC.configure(state = 'disabled')
+        self.sendC.configure(state = 'disabled')
         self.settingsC.configure(state = 'normal')
         self.polyCombo.set(self.polyCombo.cget('values')[0])
         self.lineCombo.set(self.lineCombo.cget('values')[0])
@@ -173,8 +117,7 @@ class Conversational():
 #        self.new_pressed(False)
 #        self.l3Entry.focus()
         self.convFirstRun = False
-
-        if self.standalone or not self.parent.fileLoaded:
+        if not self.parent.fileLoaded:
             self.new_pressed(False)
 
     def rgb_to_hex(self, r, g, b):
@@ -182,19 +125,19 @@ class Conversational():
 
     def file_loader(self, file, a, b):
         print(f"file_loader   file{file}   a:{a}   b:{b}")
-        self.plot(file)
+        self.plot_file(file, True)
 
-    def load_file(self, file=None):
-        if not file:
-            file = filedialog.askopenfile(initialdir=self.parent.initialDir, filetypes=self.parent.fileTypes)
-        if file:
-            self.parent.initialDir = os.path.dirname(file.name)
-            copy(file.name, self.fNgc)
-            copy(file.name, self.fNgcBkp)
-            self.existingFile = file.name
-            self.plot(file.name)
+    # def load_file(self, filename):
+    #     copy(filename, self.fNgc)
+    #     copy(filename, self.fNgcBkp)
+    #     self.existingFile = filename
+    #     self.plot_file(filename)
 
-    def plot(self, filename, title=True):
+    def plot_file(self, filename, load=False):
+        if load:
+            copy(filename, self.fNgc)
+            copy(filename, self.fNgcBkp)
+            self.existingFile = filename
         if len(self.parent.convPreview.winfo_children()) > 1:
             self.canvas.destroy()
         self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.parent.backgroundColor[1], highlightthickness=0)
@@ -207,33 +150,16 @@ class Conversational():
         self.canvas.bind('<Button-5>', self.on_mousewheel)
         self.canvas.bind('<Configure>', self.canvas_resized)
         self.mouseX, self.mouseY = 0, 0
-        # if we are in stand-alone mode we need to make a
-        # temp file because we cannot use named parameters
-        if self.standalone or self.parent.comp['development']:
-            file = os.path.join(TMPPATH, 'stand-alone.tmp')
-            with open(filename, 'r') as inFile:
-                with open(file, 'w') as outFile:
-                    for line in inFile:
-                        line = line.replace('#<_hal[plasmac.cut-feed-rate]>', '1')
-                        line = line.replace('#<_ini[axis_z]max_limit>', '1')
-                        outFile.write(line)
-            name = f"{os.path.basename(file)} from {os.path.basename(filename)}"
-        else:
-            file = filename
-            name = os.path.basename(filename)
-        if not title:
-            name = ''
         # parse the gcode file
-        unitcode = 'G21 G49'
-        initcode = 'G21 G40 G49 G80 G90 G92.1 G94 G97 M52P1'
         self.canon.__init__()
-        result, seq = gcode.parse(file, self.canon, unitcode, initcode)
+        unitcode = 'G21' if self.parent.unitsPerMm == 1 else 'G20'
+        initcode = self.parent.prefs.get('CONVERSATIONAL', 'Preamble', 'G40 G49 G80 G90 G92.1 G94 G97 M52P1')
+        result, seq = gcode.parse(filename, self.canon, unitcode, initcode.replace('\\n',' '))
         if result > gcode.MIN_ERROR:
             print(f"\nG-code error in line {seq - 1}:\n{gcode.strerror(result)}")
             return
-#        print(f"\nPLOT {filename}")
         count = 0
-        # origin text - use ovals and line as text is a PITA to scale
+#FIXME  # origin text - use ovals and line as text is a PITA to scale
         # self.canvas.create_oval(-5.5, 4.5, -3.5, .5, width=1, outline='gray90', tags=('origin'))
         # self.canvas.create_oval(-2.5, 4.5, -0.5, .5, width=1, outline='gray90', tags=('origin'))
         # self.canvas.create_line((-3, 4), (-3.2, 5), width=1, fill='gray90', tags=('origin'))
@@ -507,12 +433,9 @@ class Conversational():
             outNgc.write('(new conversational file)\nM2\n')
         copy(self.fNgc, self.fTmp)
         copy(self.fNgc, self.fNgcBkp)
-        self.plot(self.fNgc, title=False)
+        self.plot_file(self.fNgc)
         self.saveC.configure(state = 'disabled')
-        if self.standalone:
-            self.sendC.configure(state = 'normal')
-        else:
-            self.sendC.configure(state = 'disabled')
+        self.sendC.configure(state = 'disabled')
         self.validShape = False
         self.convLine['xLineStart'] = self.convLine['xLineEnd'] = 0
         self.convLine['yLineStart'] = self.convLine['yLineEnd'] = 0
@@ -533,7 +456,6 @@ class Conversational():
 #        self.vkb_show() if we add a virtual keyboard ??????????????????????????
         file = filedialog.asksaveasfilename(filetypes=self.parent.fileTypes, defaultextension=self.parent.defaultExtension)
         if file:
-             print(file)
              copy(self.fNgc, file)
              self.saveC.configure(state = 'disabled')
 #        self.vkb_show(True) if we add a virtual keyboard ??????????????????????
@@ -567,22 +489,20 @@ class Conversational():
         CONVSET.show(self)
 
     def send_pressed(self):
-        if self.standalone:
-            self.load_file()
-            return
         copy(self.fNgc, self.fNgcSent)
+#FIXME - ???
         #copy(self.fNgc, self.filteredBkp)
         self.existingFile = self.fNgc
         self.saveC.configure(state = 'disabled')
         self.sendC.configure(state = 'disabled')
-#FIXME we need to load the file in linuxcnc here
+#FIXME - we need to load the file in linuxcnc here
         print(f"we need to load the file in linuxcnc here {self.fNgc}")
         #self.file_loader(self.fNgc, False, False)
 #        self.conv_toggle(0, True)
 
     def block_request(self):
-#       may need to add this halpin for wcs rotation on abort etc.
-#       self.convBlockLoaded = self.h.newpin('CONVBLO_loaded', hal.HAL_BIT, hal.HAL_IN)
+#FIXME - may need to add this halpin for wcs rotation on abort etc.
+#        self.convBlockLoaded = self.h.newpin('CONVBLO_loaded', hal.HAL_BIT, hal.HAL_IN)
         if not self.settingsExited:
             if self.previewActive and self.active_shape():
                 return True
@@ -603,24 +523,16 @@ class Conversational():
         return
 
     def shape_request(self, shape): #, material):
-#        print(f"shape_request={shape}")#   {self.toolButton[self.convShapes.index(shape)].cget('text')}")
-#            self.toolButton[self.convShapes.index(self.oldConvButton)].select()
-        if shape == 'closer':
-            if self.standalone:
-                title = 'Close'
-                message = 'Do you wish to close this stand-alone conversational session'
-                reply = CTkMessagebox(master=self.parent, title=title, message=message, icon='question', options=['Yes', 'No']).get()
-                if reply == 'Yes':
-                    sys.exit()
-            else:
-                print('WE NEED TO SHOW THE MAIN TAB HERE')
-            return
         if not self.settingsExited:
             if self.previewActive and self.active_shape():
                 return
             self.preview_button_pressed(False)
+        if shape == 'closer':
+            self.parent.tabs.set('Main')
+            return
         self.oldModule = self.module
         if shape == 'block':
+#FIXME - ??? this was original
             # if self.o.canon is not None:
             #     unitsMultiplier = 25.4 if self.parent.unitsPerMm == 1 else 1
             #     self.shapeLen['x'] = (self.o.canon.max_extents[0] - self.o.canon.min_extents[0]) * unitsMultiplier
@@ -731,7 +643,7 @@ class Conversational():
                     return(True)
             if self.existingFile:
                 copy(self.existingFile, self.fNgcBkp)
-                self.plot(self.existingFile)
+                self.plot_file(self.existingFile)
             else:
                 with open(self.fNgcBkp, 'w') as outNgc:
                     outNgc.write('(new conversational file)\nM2\n')
@@ -761,7 +673,7 @@ class Conversational():
         # undo the shape
         if os.path.exists(self.fNgcBkp):
             copy(self.fNgcBkp, self.fNgc)
-            self.plot(self.fNgc)
+            self.plot_file(self.fNgc)
             self.addC.configure(state = 'disabled')
             if not self.validShape:
                 self.undoC.configure(state = 'disabled')
@@ -788,7 +700,6 @@ class Conversational():
             self.previewActive = False
 
     def clear_widgets(self):
-#        print('clear_widgets')
         for child in self.parent.convInput.winfo_children():
             if not self.settingsExited and isinstance(child, ctk.CTkEntry):
                 if child.winfo_name() == str(getattr(self, 'liEntry')).rsplit('.',1)[1]:
@@ -849,8 +760,6 @@ class Conversational():
         self.newC.grid(column=0, row=14, padx=3, pady=3)
         self.saveC.grid(column=1, row=14, padx=3, pady=3)
         self.settingsC.grid(column=2, row=14, padx=3, pady=3)
-        if self.standalone:
-            self.sendC.configure(text=_('Load'))
         self.sendC.grid(column=3, row=14, padx=3, pady=3)
 
     def create_toolbar_widgets(self):
@@ -863,7 +772,7 @@ class Conversational():
         self.toolButton = []
         # toolbar buttons
         for i in range(len(self.convShapes)):
-            image = ctk.CTkImage(light_image = Image.open(os.path.join(IMGPATH, f"{self.convShapes[i]}.png")), size = self.convSizes[i])
+            image = ctk.CTkImage(light_image = Image.open(os.path.join(self.parent.imgDir, f"{self.convShapes[i]}.png")), size = self.convSizes[i])
             self.toolButton.append(ctk.CTkButton(self.parent.convTools, text='', width=40, height=40, image=image, \
                                                  command=lambda i=i: self.shape_request(self.convShapes[i])))
             self.toolButton[i].grid(row=0, column=[i], padx=3, pady=3, sticky='ns')
@@ -1067,7 +976,6 @@ class Conversational():
                           self.undoC, self.newC, self.saveC, self.settingsC, self.sendC]
 #FIXME - takefocus not applicable for ctk
         # for button in self.buttons:
-        #     print(f"button: {button._name}")
         #     button.configure(takefocus=0)
         # self.combos = [self.matCombo, self.polyCombo, self.lineCombo]
         # for combo in self.combos:
@@ -1094,7 +1002,6 @@ class Conversational():
         panUp.grid(row=8, column=0, padx=3, pady=3, sticky='ew')
         panDown = ctk.CTkButton(master = previewButtons, text = '\u2193', command = self.pan_down, width=40, height=40, font=('', 24))
         panDown.grid(row=9, column=0, padx=3, pady=3, sticky='ew')
-
 
 class Canon:
     ''' use this class instead of glcanon as we are only interested in:
@@ -1237,79 +1144,3 @@ class Canon:
 
     def get_tool(self, pocket):
         return -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0
-
-
-''' ##############################################################################################
-
-    The following allows conversational to run in standalone mode
-    If LinuxCNC is run in place it requires:
-        a path to the root of the repository
-        a path to a material file, if not specified then a single basic material will be allocated
-    Options are:
-        -i          - Imperial mode, metric is the default
-        -l "path"   - Path to root of rip repository eg ~/linuxcnc-dev
-        -m "path"   - Path to a material file
-
-'''
-
-class Window(ctk.CTk):
-    def __init__(self, metric, materials):
-        super().__init__()
-        ctk.set_default_color_theme('dark-blue')
-        ctk.set_appearance_mode('dark')
-        self.geometry("800x600")
-        self.title("Standalone Conversational")
-
-        # dummy button to get some colors
-        blah = ctk.CTkButton(self)
-        self.buttonOffColor = blah.cget('fg_color')
-        self.buttonOnColor = blah.cget('hover_color')
-        self.backgroundColor = blah.cget('bg_color')
-        self.borderColor = blah.cget('border_color')
-        self.textColor = blah.cget('text_color')
-        self.disabledColor = blah.cget('text_color_disabled')
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-        self.convTools = ctk.CTkFrame(self, border_width=1, border_color=self.borderColor, height=40)
-        self.convTools.grid(row=0, column=0, columnspan=2, padx=1, pady = 1, sticky='nsew')
-        self.convInput = ctk.CTkFrame(self, border_width=1, border_color=self.borderColor, width=120)
-        self.convInput.grid(row=1, column=0, padx=1, pady = 1, sticky='nsew')
-        self.convInput.grid_rowconfigure(10, weight=1)
-        self.convPreview = ctk.CTkFrame(self, border_width=1, border_color=self.borderColor)
-        self.convPreview.grid(row=1, column=1, padx=1, pady = 1, sticky='nsew')
-        self.convPreview.grid_rowconfigure(0, weight=1)
-        self.convPreview.grid_columnconfigure(1, weight=1)
-        self.tabs = ctk.CTkTabview(self)
-        self.tabs.add('Conversational')
-        self.comp = {'development': False}
-        self.materialFileDict = {}
-        if materials:
-            num, nam, kw = None, None, None
-            with open(materials, 'r') as inFile:
-                for line in inFile:
-                    if line.startswith('[MATERIAL'):
-                        num = int(line.split('R_')[1].replace(']', ''))
-                        self.materialFileDict[num] = {}
-                    elif line.startswith('NAME'):
-                        nam = line.split('=')[1].strip()
-                        self.materialFileDict[num]['name'] = nam
-                    elif line.startswith('KERF'):
-                        kw = line.split('=')[1].strip()
-                        self.materialFileDict[num]['kerf_width'] = kw
-        if metric:
-            self.unitsPerMm = 1
-            if not self.materialFileDict:
-                self.materialFileDict = {1: {'name': 'Material #1', 'kerf_width': 1.0}}
-        else:
-            self.unitsPerMm = 0.03937
-            if not self.materialFileDict:
-                self.materialFileDict = {1: {'name': 'Material #1', 'kerf_width': 0.04}}
-        self.matNum = 0
-        self.fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
-        self.initialDir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
-        self.defaultExtension = '.ngc'
-        Conversational(self, True)
-
-if __name__ == '__main__':
-    app = Window(metric, materials)
-    app.mainloop()
