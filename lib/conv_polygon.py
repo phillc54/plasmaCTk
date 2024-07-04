@@ -50,7 +50,7 @@ def preview(self):
     if error:
         self.dialog_show_ok(_('Polygon Error'), error)
     else:
-        self.file_loader(self.fNgc, True, False)
+        self.plot_file(self.fNgc)
         self.addC.configure(state = 'normal')
         self.undoC.configure(state = 'normal')
         self.preview_button_pressed(True)

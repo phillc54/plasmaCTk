@@ -100,7 +100,7 @@ def preview(self):
                            int(self.matCombo.get().split(':')[0]), \
                            self.matCombo.get().split(':')[1].strip())
     LINE.last_segment(self.fTmp, self.fNgc, self.convLine['gcodeLine'], self.postAmble)
-    self.file_loader(self.fNgc, True, False)
+    self.plot_file(self.fNgc)
     self.addC.configure(state = 'normal')
     self.undoC.configure(state = 'normal')
     self.preview_button_pressed(True)
