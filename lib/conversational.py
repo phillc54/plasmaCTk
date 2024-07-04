@@ -141,7 +141,7 @@ class Conversational():
         if len(self.parent.convPreview.winfo_children()) > 1:
             self.canvas.destroy()
         self.canvas = ctk.CTkCanvas(self.parent.convPreview, bg=self.parent.backgroundColor[1], highlightthickness=0)
-        self.canvas.grid(row=0, column=1, padx=3, pady=3, sticky='nsew')
+        self.canvas.grid(row=0, column=1, padx=(2,4), pady=4, sticky='nsew')
         self.canvas.bind('<Double-Button-1>', self.on_mouse_left_double)
         self.canvas.bind('<ButtonPress-1>', self.on_mouse_left_press)
         self.canvas.bind('<B1-Motion>', self.on_mouse_drag)
@@ -753,14 +753,14 @@ class Conversational():
 
     def show_common_widgets(self):
         self.spacer.grid(column=0, row=11, sticky='ns')
-        self.previewC.grid(column=0, row=12, padx=3, pady=3)
-        self.addC.grid(column=1, row=12, columnspan=2, pady=3)
-        self.undoC.grid(column=3, row=12, padx=3, pady=3)
-        self.sepline.grid(column=0, row=13, columnspan=4, sticky='ew', padx=8, pady=3)
-        self.newC.grid(column=0, row=14, padx=3, pady=3)
-        self.saveC.grid(column=1, row=14, padx=3, pady=3)
-        self.settingsC.grid(column=2, row=14, padx=3, pady=3)
-        self.sendC.grid(column=3, row=14, padx=3, pady=3)
+        self.previewC.grid(column=0, row=12, padx=(4,2), pady=2)
+        self.addC.grid(column=1, row=12, columnspan=2, pady=2)
+        self.undoC.grid(column=3, row=12, padx=(2,4), pady=2)
+        self.sepline.grid(column=0, row=13, columnspan=4, sticky='ew', padx=8, pady=4)
+        self.newC.grid(column=0, row=14, padx=(4,2), pady=(2,4))
+        self.saveC.grid(column=1, row=14, padx=2, pady=(2,4))
+        self.settingsC.grid(column=2, row=14, padx=2, pady=(2,4))
+        self.sendC.grid(column=3, row=14, padx=(2,4), pady=(2,4))
 
     def create_toolbar_widgets(self):
         for s in self.parent.convTools.pack_slaves():
@@ -775,7 +775,13 @@ class Conversational():
             image = ctk.CTkImage(light_image = Image.open(os.path.join(self.parent.imgDir, f"{self.convShapes[i]}.png")), size = self.convSizes[i])
             self.toolButton.append(ctk.CTkButton(self.parent.convTools, text='', width=40, height=40, image=image, \
                                                  command=lambda i=i: self.shape_request(self.convShapes[i])))
-            self.toolButton[i].grid(row=0, column=[i], padx=3, pady=3, sticky='ns')
+            if i == 0:
+                x = (4,2)
+            elif i == len(self.convShapes) - 1:
+                x = (2,4)
+            else:
+                x = 2
+            self.toolButton[i].grid(row=0, column=[i], padx=x, pady=4, sticky='ns')
 
     def create_input_widgets(self):
         for s in self.parent.convInput.grid_slaves():
@@ -986,22 +992,22 @@ class Conversational():
             s.destroy()
 # PLOTTER WIDGETS
         previewButtons = ctk.CTkFrame(self.parent.convPreview, fg_color='transparent', width=20)
-        previewButtons.grid(row=0, column=0, padx=3, pady=3, sticky='nsew')
+        previewButtons.grid(row=0, column=0, padx=(4,2), pady=4, sticky='nsew')
         previewButtons.grid_rowconfigure((0, 10), weight=1)
         zoomIn = ctk.CTkButton(master = previewButtons, text = '+', command = self.zoom_in, width=40, height=40, font=('', 24))
-        zoomIn.grid(row=1, column=0, padx=3, pady=3, sticky='ew')
+        zoomIn.grid(row=1, column=0, pady=(4,2), sticky='ew')
         zoomOut = ctk.CTkButton(master = previewButtons, text = '-', command = self.zoom_out, width=40, height=40, font=('', 24))
-        zoomOut.grid(row=2, column=0, padx=3, pady=3, sticky='ew')
+        zoomOut.grid(row=2, column=0, pady=2, sticky='ew')
         zoomAll = ctk.CTkButton(master = previewButtons, text = '\u25cb', command = self.zoom_all, width=40, height=40, font=('', 24))
-        zoomAll.grid(row=4, column=0, padx=3, pady=23, sticky='ew')
+        zoomAll.grid(row=4, column=0, pady=(24,24), sticky='ew')
         panLeft = ctk.CTkButton(master = previewButtons, text = '\u2190', command = self.pan_left, width=40, height=40, font=('', 24))
-        panLeft.grid(row=6, column=0, padx=3, pady=3, sticky='ew')
+        panLeft.grid(row=6, column=0, pady=2, sticky='ew')
         panRight = ctk.CTkButton(master = previewButtons, text = '\u2192', command = self.pan_right, width=40, height=40, font=('', 24))
-        panRight.grid(row=7, column=0, padx=3, pady=3, sticky='ew')
+        panRight.grid(row=7, column=0, pady=2, sticky='ew')
         panUp = ctk.CTkButton(master = previewButtons, text = '\u2191', command = self.pan_up, width=40, height=40, font=('', 24))
-        panUp.grid(row=8, column=0, padx=3, pady=3, sticky='ew')
+        panUp.grid(row=8, column=0, pady=2, sticky='ew')
         panDown = ctk.CTkButton(master = previewButtons, text = '\u2193', command = self.pan_down, width=40, height=40, font=('', 24))
-        panDown.grid(row=9, column=0, padx=3, pady=3, sticky='ew')
+        panDown.grid(row=9, column=0, pady=(2,4), sticky='ew')
 
 class Canon:
     ''' use this class instead of glcanon as we are only interested in:
