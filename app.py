@@ -55,6 +55,13 @@ class PlasmaCTk(ctk.CTk):
 
         self.userButtons = {}
         self.userButtonCodes = {}
+
+        self.estopwidgets = []
+        self.powerWidgets = []
+        self.idleWidgets = []
+        self.idleHomedWidgets = []
+        self.homedWidgets = []
+
         self.fileLoaded = None
         self.fileTypes = [('G-Code Files', '*.ngc *.nc *.tap'), ('All Files', '*.*')]
         self.initialDir = os.path.expanduser('~/linuxcnc/nc_files/plasmac')
@@ -94,9 +101,58 @@ class PlasmaCTk(ctk.CTk):
         print('set tab', tab, 'state to', stat)
 
 
+
+
+
 ##############################################################################
-# overrides
+# tab callback
 ##############################################################################
+    def tab_changed(self, tab):
+        if tab == 'Conversational':
+            self.conv.canvas.update()
+            self.conv.zoom_all()
+
+##############################################################################
+# main tab callbacks
+##############################################################################
+
+    def estop_reset(self):
+        if self.estopReset.cget('text_color') == 'red':
+            self.estopReset.configure(text_color='green')
+        print('estop_reset')
+
+    def power_toggled(self):
+        if self.powerToggle.cget('text_color') == 'red':
+            self.powerToggle.configure(text_color='green')
+        else:
+            self.powerToggle.configure(text_color='red')
+            #for child in self.
+        print('power_toggled')
+
+    def home_all_clicked(self):
+        print('home_all_clicked')
+
+    def zero_all_clicked(self):
+        print('zero_all_clicked')
+
+    def load_clicked(self):
+        print('load_clicked')
+
+    def reload_clicked(self):
+        print('reload_clicked')
+
+    def run_clicked(self):
+        print('Run clicked')
+
+    def stop_clicked(self):
+        print('Stop clicked')
+
+    def pause_clicked(self):
+        print('Pause clicked')
+
+    def dry_run_clicked(self):
+        print('Dry Run clicked')
+
     def ovr_feed_changed(self, value):
         print(value)
         self.ovrFeedLbl.configure(text=f'Feed {value:.0f}%')
@@ -121,25 +177,8 @@ class PlasmaCTk(ctk.CTk):
         self.ovrJog.set(default)
         self.ovrJogLbl.configure(text=f'Jog {default:.0f}%')
 
-
 ##############################################################################
-# main control buttons
-##############################################################################
-
-    def run_clicked(self):
-        print('Run clicked')
-
-    def stop_clicked(self):
-        print('Stop clicked')
-
-    def pause_clicked(self):
-        print('Pause clicked')
-
-    def dry_run_clicked(self):
-        print('Dry Run clicked')
-
-##############################################################################
-# main 1 buttons
+# temp main 1 buttons
 ##############################################################################
 
     def open_clicked(self):
@@ -162,7 +201,7 @@ class PlasmaCTk(ctk.CTk):
         r = 1
         for button in range(21):
             self.userButtons[button] = ctk.CTkButton(self.mainButtonFrame, text = f'User Button {button}', height=40)
-            self.userButtons[button].grid(row=r, column=0, padx=2, pady=3, sticky='ew')
+            self.userButtons[button].grid(row=r, column=0, pady=2, sticky='nsew')
             self.userButtonCodes[button] = f'blah {button}'
             self.userButtons[button].bind('<ButtonPress-1>', lambda event: self.user_button_pressed(int(event.widget.cget('text').rsplit(' ', 1)[1])))
             self.userButtons[button].bind('<ButtonRelease-1>', lambda event: self.user_button_released(int(event.widget.cget('text').rsplit(' ', 1)[1])))
@@ -297,11 +336,11 @@ class PlasmaCTk(ctk.CTk):
         self.materialFileDict = {1: {'name': 'Mat #1', 'kerf_width': 1.1, 'pierce_height': 3.1, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.1, 'cut_speed': 4000, 'cut_amps': 41, 'cut_volts': 101, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 2: {'name': 'Mat #2 is the longest by a very long shot', 'kerf_width': 1.2, 'pierce_height': 3.2, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2002, 'cut_amps': 42, 'cut_volts': 102, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 3: {'name': 'Mat #3', 'kerf_width': 1.3, 'pierce_height': 3.3, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.3, 'cut_speed': 2003, 'cut_amps': 43, 'cut_volts': 103, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 4: {'name': 'Mat #4', 'kerf_width': 1.4, 'pierce_height': 3.4, 'pierce_delay': 0.4, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.4, 'cut_speed': 2004, 'cut_amps': 44, 'cut_volts': 104, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}, 5: {'name': 'Mat #5', 'kerf_width': 1.5, 'pierce_height': 3.5, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.5, 'cut_speed': 2005, 'cut_amps': 45, 'cut_volts': 105, 'pause_at_end': 0.5, 'gas_pressure': 0.0, 'cut_mode': 1}, 6: {'name': 'Mat #6', 'kerf_width': 1.6, 'pierce_height': 3.0, 'pierce_delay': 0.0, 'puddle_jump_height': 0, 'puddle_jump_delay': 0.0, 'cut_height': 1.6, 'cut_speed': 2006, 'cut_amps': 46, 'cut_volts': 106, 'pause_at_end': 0.0, 'gas_pressure': 0.0, 'cut_mode': 1}}
         self.matNum = 0
 
-        self.create_tabs()# = Tabs(self)
+        self.create_tabs()
         self.create_main_button_frame()
+        self.create_main_machine_frame()
         self.create_main_control_frame()
         self.create_main_dro_frame()
-        self.create_main_2_frame()
         self.create_main_3_frame()
         self.create_main_4_frame()
         self.create_main_5_frame()
@@ -323,13 +362,7 @@ class PlasmaCTk(ctk.CTk):
 
     def create_tabs(self):
         ''' tabview as the main window '''
-
-        def tab_changed(tab):
-            if tab == 'Conversational':
-                self.conv.canvas.update()
-                self.conv.zoom_all()
-
-        self.tabs = ctk.CTkTabview(self, height=1, anchor='sw', command=lambda: tab_changed(self.tabs.get()))
+        self.tabs = ctk.CTkTabview(self, height=1, anchor='sw', command=lambda: self.tab_changed(self.tabs.get()))
         self.tabs.add('Main')
         self.tabs.tab('Main').grid_rowconfigure((0, 1), weight=1)
         self.tabs.tab('Main').grid_columnconfigure((1, 2, 3), weight=1)
@@ -347,36 +380,89 @@ class PlasmaCTk(ctk.CTk):
         self.tabs.tab('Status').grid_columnconfigure((0, 1, 2), weight=1)
         # large width is a kludge to make buttons appear homogeneous
         for button in self.tabs._segmented_button._buttons_dict:
-            self.tabs._segmented_button._buttons_dict[button].configure(width=1000)
+            self.tabs._segmented_button._buttons_dict[button].configure(width=10000)
         self.tabs.grid(row=1, column=1, padx=0, sticky='nsew')
 
     def create_main_button_frame(self):
         ''' main tab button frame '''
-        self.mainButtons = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor, width=146)
+        self.mainButtons = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
         self.mainButtons.grid(row=0, column=0, rowspan=2, padx=2, pady=2, sticky='nsew')
-        self.mainButtons.grid_rowconfigure((1, 2), weight=1)
-#        self.mainButtonLbl = ctk.CTkLabel(self.mainButtons, text='Button Panel', height=16, anchor='n')
-#        self.mainButtonLbl.grid(row=0, column=0, padx=4, pady=(1, 0), sticky='new')
-        self.mainButtonFrame = ctk.CTkScrollableFrame(self.mainButtons, width=144, fg_color='transparent')
-#        self.mainButtonFrame.grid(row=1, column=0, rowspan=2, padx=2, pady=(0, 2), sticky='nsew')
-        self.mainButtonFrame.grid(row=1, column=0, rowspan=2, padx=4, pady=4, sticky='nsew')
+        self.mainButtonFrame = ctk.CTkScrollableFrame(self.mainButtons, width=100, fg_color='transparent')
+        self.mainButtonFrame.grid(row=0, column=0, padx=2, pady=3, sticky='nsew')
         self.torchEnableBtn = ctk.CTkButton(self.mainButtonFrame, text = 'Torch Enable', command=self.torch_enable_clicked, height=40)
-        self.torchEnableBtn.grid(row=0, column=0, padx=0, pady=(0, 4), sticky='new')
+        self.torchEnableBtn.grid(row=0, column=0, pady=(0, 2), sticky='new')
         self.user_button_setup()
+        self.mainButtons.grid_rowconfigure(0, weight=1)
+        self.mainButtonFrame.grid_rowconfigure('all', weight=1, uniform='a')
+        self.mainButtonFrame.grid_columnconfigure(0, weight=1)
+
+    def create_main_machine_frame(self):
+        ''' main tab machine frame '''
+        self.mainMachine = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
+        self.mainMachine.grid(row=0, column=1, padx=2, pady=2, sticky='nsew')
+        self.estopReset = ctk.CTkButton(self.mainMachine, text='Estop Reset', text_color='red', command = self.estop_reset)
+        self.estopReset.grid(row=0, column=0, padx=(4, 2), pady=(4,2), sticky='nsew')
+        self.powerToggle = ctk.CTkButton(self.mainMachine, text='Power', text_color='red', command = self.power_toggled)
+        self.powerToggle.grid(row=0, column=1, padx=(2, 4), pady=(4,2), sticky='nsew')
+        self.homeAll = ctk.CTkButton(self.mainMachine, text='Home All', text_color='red', command = self.home_all_clicked)
+        self.homeAll.grid(row=1, column=0, padx=(4, 2), pady=2, sticky='nsew')
+        self.zeroAll = ctk.CTkButton(self.mainMachine, text='Zero XY', command = self.zero_all_clicked)
+        self.zeroAll.grid(row=1, column=1, padx=(2, 4), pady=2, sticky='nsew')
+        self.loadFile = ctk.CTkButton(self.mainMachine, text='Open File', text_color='red', command = self.load_clicked)
+        self.loadFile.grid(row=2, column=0, padx=(4, 2), pady=(2,4), sticky='nsew')
+        self.reloadFile = ctk.CTkButton(self.mainMachine, text='Reload File', command = self.reload_clicked)
+        self.reloadFile.grid(row=2, column=1, padx=(2, 4), pady=(2,4), sticky='nsew')
+        self.mainMachine.grid_rowconfigure('all', weight=1, uniform='a')
+        self.mainMachine.grid_columnconfigure('all', weight=1, uniform='b')
+        self.estopwidgets.append(self.powerToggle)
+        self.powerWidgets.append(self.homeAll)
+#        self.idleWidgets.append()
+        self.idleHomedWidgets.append(self.zeroAll)
+#        self.homedWidgets.append()
+
+    def create_main_control_frame(self):
+        ''' main tab control frame '''
+        self.mainControl = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
+        self.mainControl.grid(row=1, column=1, padx=2, pady=2, sticky='nsew')
+        self.cycleStart = ctk.CTkButton(self.mainControl, text='Cycle Start', command = self.run_clicked)
+        self.cycleStart.grid(row=0, column=0, rowspan=2, columnspan=3, padx=(4, 2), pady=(4,2), sticky='nsew')
+        self.cycleStop = ctk.CTkButton(self.mainControl, text='Cycle Stop', command = self.stop_clicked)
+        self.cycleStop.grid(row=0, column=3, rowspan=2, columnspan=3, padx=(2, 4), pady=(4,2), sticky='nsew')
+        self.cyclePause = ctk.CTkButton(self.mainControl, text='Cycle Pause', command = self.pause_clicked)
+        self.cyclePause.grid(row=2, column=0, rowspan=2, columnspan=3, padx=(4, 2), pady = 2, sticky='nsew')
+        self.dryRunBtn = ctk.CTkButton(self.mainControl, text = 'Dry Run', command=self.dry_run_clicked)
+        self.dryRunBtn.grid(row=2, column=3, rowspan=2, columnspan=3, padx=(2, 4), pady=2, sticky='nsew')
+        self.ovrFeed = ctk.CTkSlider(self.mainControl, from_=50, to=120, number_of_steps=120-50, command=self.ovr_feed_changed, width=60)
+        self.ovrFeed.set(100)
+        self.ovrFeed.grid(row=4, column=0, columnspan=4, padx=(4, 2), pady=(8, 2), sticky='nsew')
+        self.ovrFeedLbl = ctk.CTkLabel(self.mainControl, text=f'Feed {self.ovrFeed.get():.0f}%', anchor='e')
+        self.ovrFeedLbl.grid(row=4, column=4, columnspan=2, padx=(2,4), pady=(8, 2), sticky='nsew')
+        self.ovrFeedLbl.bind('<ButtonPress-1>', self.ovr_feed_reset)
+        self.ovrRapid = ctk.CTkSlider(self.mainControl, from_=50, to=100, number_of_steps=50, command=self.ovr_rapid_changed, width=60)
+        self.ovrRapid.set(100)
+        self.ovrRapid.grid(row=5, column=0, columnspan=4, padx=(4, 2), pady=(8, 2), sticky='nsew')
+        self.ovrRapidLbl = ctk.CTkLabel(self.mainControl, text=f'Rapid {self.ovrRapid.get():.0f}%', anchor='e')
+        self.ovrRapidLbl.grid(row=5, column=4, columnspan=2, padx=(2,4), pady=(8, 2), sticky='nsew')
+        self.ovrRapidLbl.bind('<ButtonPress-1>', self.ovr_rapid_reset)
+        self.ovrJog = ctk.CTkSlider(self.mainControl, from_=50, to=100, number_of_steps=50, command=self.ovr_jog_changed, width=60)
+        self.ovrJog.set(100)
+        self.ovrJog.grid(row=6, column=0, columnspan=4, padx=(4, 2), pady=(8, 4), sticky='nsew')
+        self.ovrJogLbl = ctk.CTkLabel(self.mainControl, text=f'Jog {self.ovrJog.get():.0f}%', anchor='e')
+        self.ovrJogLbl.grid(row=6, column=4, columnspan=2, padx=(2,4), pady=(8, 4), sticky='nsew')
+        self.ovrJogLbl.bind('<ButtonPress-1>', self.ovr_jog_reset)
+        self.mainControl.grid_rowconfigure('all', weight=1, uniform='a')
+        self.mainControl.grid_columnconfigure('all', weight=1, uniform='c')
 
     def create_main_dro_frame(self):
         ''' main tab dro frame '''
         self.main1Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main1Frame.grid(row=0, column=1, padx=2, pady=2, sticky='nsew')
-        self.main1Frame.grid_columnconfigure((0,2,3), weight=1)
-        self.main1Frame.grid_columnconfigure(1, weight=5)
+        self.main1Frame.grid(row=0, column=2, padx=2, pady=2, sticky='nsew')
         row = 0
         for axis in self.axes['axes']:
-            self.axes[f"label{axis}"] = ctk.CTkLabel(self.main1Frame, text=axis, font=('', 24), width=20)
-            self.axes[f"dro{axis}"] = HalLabel(self.main1Frame, decimals=3, pin_name=f"dro-{axis.lower()}", text_color='red', font=('mono', 26), anchor='e')
-            self.axes[f"zero{axis}"] = ctk.CTkButton(self.main1Frame, text='0', font=('', 24), width=20)
-            self.axes[f"home{axis}"] = ctk.CTkButton(self.main1Frame, text='H', font=('', 24), width=20)
-
+            self.axes[f"label{axis}"] = ctk.CTkLabel(self.main1Frame, text=axis, font=('', 20), width=30)
+            self.axes[f"dro{axis}"] = HalLabel(self.main1Frame, decimals=3, pin_name=f"dro-{axis.lower()}", text_color='red', font=('mono', 20), anchor='e', width=140)
+            self.axes[f"zero{axis}"] = ctk.CTkButton(self.main1Frame, text='0', font=('', 20), width=40)
+            self.axes[f"home{axis}"] = ctk.CTkButton(self.main1Frame, text='H', font=('', 20), width=40)
             self.axes[f"label{axis}"].grid(row=row, column=0, padx=(4,2), pady=(4,0), sticky='nsew')
             self.axes[f"dro{axis}"].grid(row=row, column=1, padx=2, pady=(4,0), sticky='nsew')
             self.axes[f"zero{axis}"].grid(row=row, column=2, padx=2, pady=(4,0), sticky='nsew')
@@ -386,50 +472,9 @@ class PlasmaCTk(ctk.CTk):
         self.open = ctk.CTkButton(self.main1Frame, text='Open', command=self.open_clicked)
         self.open.grid(row=9, column=0, columnspan=4, padx=(4,4), pady=(4,4), sticky='nsew')
 
-        print('rows', list(range(self.main1Frame.grid_size()[1])))
-#        self.main1Frame.grid_rowconfigure(list(range(self.main1Frame.grid_size()[1])), weight=1)#(0,1,2,3,4,5,6,7,8,9), weight=1)
-        self.main1Frame.grid_rowconfigure('all', weight=1)#(0,1,2,3,4,5,6,7,8,9), weight=1)
-
-    def create_main_control_frame(self):
-        ''' main tab control frame '''
-        self.mainControl = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.mainControl.grid(row=1, column=1, padx=2, pady=2, sticky='nsew')
-        self.mainControl.grid_rowconfigure((1, 2, 3, 4), weight=6)
-        self.mainControl.grid_rowconfigure((5, 6, 7), weight=1)
-        self.mainControl.grid_columnconfigure((0, 1, 2, 3), weight=1)
-#        self.mainControlLbl = ctk.CTkLabel(self.mainControl, text='Cycle Panel', height=16, anchor='n')
-#        self.mainControlLbl.grid(row=0, column=0, columnspan=4, padx=4, pady=(1, 0), sticky='new')
-        self.cycleStart = ctk.CTkButton(self.mainControl, text='Cycle Start', command = self.run_clicked)
-        self.cycleStart.grid(row=1, column=0, rowspan=2, columnspan=2, padx=(4, 2), pady=(4,0), sticky='nsew')
-        self.cycleStop = ctk.CTkButton(self.mainControl, text='Cycle Stop', command = self.stop_clicked)
-        self.cycleStop.grid(row=1, column=2, rowspan=2, columnspan=2, padx=(2, 4), pady=(4,0), sticky='nsew')
-        self.cyclePause = ctk.CTkButton(self.mainControl, text='Cycle Pause', command = self.pause_clicked)
-        self.cyclePause.grid(row=3, column=0, rowspan=2, columnspan=2, padx=(4, 2), pady = (4, 0), sticky='nsew')
-        self.dryRunBtn = ctk.CTkButton(self.mainControl, text = 'Dry Run', command=self.dry_run_clicked)
-        self.dryRunBtn.grid(row=3, column=2, rowspan=2, columnspan=2, padx=(2, 4), pady=(4, 0), sticky='nsew')
-        self.ovrFeed = ctk.CTkSlider(self.mainControl, from_=50, to=120, number_of_steps=120-50, command=self.ovr_feed_changed)
-        self.ovrFeed.set(100)
-        self.ovrFeed.grid(row=5, column=0, columnspan=3, padx=(4, 2), pady=(12, 0), sticky='ew')
-        self.ovrFeedLbl = ctk.CTkLabel(self.mainControl, text=f'Feed {self.ovrFeed.get():.0f}%', anchor='e')
-        self.ovrFeedLbl.grid(row=5, column=3, padx=(2,4), pady=(12, 0), sticky='ew')
-        self.ovrFeedLbl.bind('<ButtonPress-1>', self.ovr_feed_reset)
-        self.ovrRapid = ctk.CTkSlider(self.mainControl, from_=50, to=100, number_of_steps=50, command=self.ovr_rapid_changed)
-        self.ovrRapid.set(100)
-        self.ovrRapid.grid(row=6, column=0, columnspan=3, padx=(4, 2), pady=(12, 0), sticky='ew')
-        self.ovrRapidLbl = ctk.CTkLabel(self.mainControl, text=f'Rapid {self.ovrRapid.get():.0f}%', anchor='e')
-        self.ovrRapidLbl.grid(row=6, column=3, padx=(2,4), pady=(12, 0), sticky='ew')
-        self.ovrRapidLbl.bind('<ButtonPress-1>', self.ovr_rapid_reset)
-        self.ovrJog = ctk.CTkSlider(self.mainControl, from_=50, to=100, number_of_steps=50, command=self.ovr_jog_changed)
-        self.ovrJog.set(100)
-        self.ovrJog.grid(row=7, column=0, columnspan=3, padx=(4, 2), pady=(12, 6), sticky='ew')
-        self.ovrJogLbl = ctk.CTkLabel(self.mainControl, text=f'Jog {self.ovrJog.get():.0f}%', anchor='e')
-        self.ovrJogLbl.grid(row=7, column=3, padx=(2,4), pady=(12, 6), sticky='ew')
-        self.ovrJogLbl.bind('<ButtonPress-1>', self.ovr_jog_reset)
-
-    def create_main_2_frame(self):
-        ''' main tab ??? frame '''
-        self.main2Frame = ctk.CTkFrame(self.tabs.tab('Main'), border_width=1, border_color=self.borderColor)
-        self.main2Frame.grid(row=0, column=2, padx=2, pady=2, sticky='nsew')
+        self.main1Frame.grid_columnconfigure((0,2,3), weight=1)
+        self.main1Frame.grid_columnconfigure(1, weight=4)
+        self.main1Frame.grid_rowconfigure('all', weight=1, uniform='a')
 
     def create_main_3_frame(self):
         ''' main tab ??? frame '''
@@ -698,7 +743,8 @@ class HalLabel(ctk.CTkFrame):
                  text_color=None,
                  border_color=None,
                  font=('', 12),
-                 anchor='center'):
+                 anchor='center',
+                 width=120):
         super().__init__(master)
         self.num_type = int if not decimals else float
         self.decimals = decimals
@@ -709,7 +755,7 @@ class HalLabel(ctk.CTkFrame):
             border_color = self.winfo_toplevel().borderColor
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
-        self.label = ctk.CTkLabel(self)
+        self.label = ctk.CTkLabel(self, width=width)
         self.label.grid(row=0, column=0, padx=3, pady=3, sticky='nsew')
         self.configure(fg_color='transparent',border_width=1 , border_color=border_color)
         self.label.configure(text_color=text_color, font=font, anchor=anchor)
