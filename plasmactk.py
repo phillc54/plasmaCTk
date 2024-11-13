@@ -2,11 +2,11 @@
 
 import os
 import sys
-import linuxcnc
-import hal
+from configparser import RawConfigParser, NoSectionError, NoOptionError
 import customtkinter as ctk
 from customtkinter import filedialog
-from configparser import RawConfigParser, NoSectionError, NoOptionError
+import linuxcnc
+import hal
 
 class PlasmaCTk(ctk.CTk):
     def __init__(self):
